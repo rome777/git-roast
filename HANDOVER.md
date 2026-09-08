@@ -1,9 +1,11 @@
 # 📋 GitRoast 실시간 인수인계 문서 (HANDOVER.md)
 
-> **최종 갱신 시각**: 2026-09-08 15:13:00 (KST)  
+> **최종 갱신 시각**: 2026-09-08 16:30:00 (KST)  
 > **프로젝트 위치**: `c:\aiffel_work\git-roast` (NTFS Junction: `c:\aiffel_work\business`)  
 > **현재 서버 상태**: `http://localhost:3000` (Next.js 14 프로덕션 빌드 가동 중)  
-> **현재 DB**: **PostgreSQL 17** (로컬 5432, `gitroast` DB) — 관리자 콘솔에 `🐘 PostgreSQL 활성화` 표시
+> **현재 DB**: **PostgreSQL 17** (로컬 5432, `gitroast` DB) — 관리자 콘솔에 `🐘 PostgreSQL 활성화` 표시  
+> **원격 저장소**: [`github.com/rome777/git-roast`](https://github.com/rome777/git-roast) (main)  
+> **배포 대상 (결정됨)**: **Vercel(Hobby) + Neon(Free)** — 아직 배포 전. 근거와 남은 절차는 6절 마지막 항목 참조
 
 ---
 
@@ -62,8 +64,10 @@
 | `DATABASE_URL` | ⬜ | 설정 시 PostgreSQL, 미설정 시 SQLite(`data/gitroast.db`) 자동 전환 |
 | `GITHUB_TOKEN` | ⬜ | **미설정 시 GitHub API 가 비인증(시간당 60회)으로 동작한다.** 분석량이 늘면 반드시 설정 |
 | `VERTEX_AI_API_KEY`, `GOOGLE_PROJECT_ID` | ⬜ | Vertex AI 경유 시 |
-| `NEXT_PUBLIC_SITE_URL` | ⬜ | 공유 링크 절대경로 생성 |
+| `NEXT_PUBLIC_SITE_URL` | ⬜ | 공유 링크 메타태그의 기준 주소. **`NEXT_PUBLIC_` 접두사는 빌드 시점에 값이 코드에 박힌다** — 배포 후 대시보드에서 바꿔도 재배포 전에는 반영되지 않는다. |
 | `DISABLE_DEMO_LOGIN` | ⬜ | `true` 로 두면 데모 원클릭 로그인 차단 (운영 권장) |
+| `RATE_LIMIT_*` | ⬜ | `/api/analyze` 요청량 상한 5종. 미설정 시 기본값(게스트 3/시간·10/일, 계정 30/일, 전역 500/일). `.env.example` 8번 참조 |
+| `COOKIE_SECURE` | ⬜ | 세션 쿠키 secure 플래그 강제 지정. **미설정 시 `NODE_ENV=production` 이면 자동으로 켜진다.** 로컬에서 프로덕션 빌드를 http 로 확인할 때만 `false` |
 
 `SESSION_SECRET` 생성:
 ```bash
@@ -459,4 +463,82 @@ c:\aiffel_work\git-roast\
    - 저장소 URL: [`https://github.com/rome777/git-roast`](https://github.com/rome777/git-roast)
    - `.env.local`, DB 파일 등 보안 민감 파일은 철저히 배제된 상태로 깨끗하게 Public Push 완료.
 
+---
 
+### 2026-09-08 — 배포 대상 확정(Vercel + Neon) 및 공개 배포 전 코드 정비
+
+**① 호스팅 선택 — "완전 무료 + 상시 + Postgres" 조건으로 실제 조사**
+
+조건을 동시에 만족하는 조합이 사실상 하나뿐이었다 (2026-09-08 기준 각 사 공식 문서 확인).
+
+| 후보 | 탈락 사유 |
+| :--- | :--- |
+| Railway | 무료 티어 없음 ($1/월 크레딧은 며칠이면 소진) |
+| Render | 웹 서비스 15분 후 슬립 + **무료 Postgres 가 생성 30일 뒤 만료** (활동 여부와 무관한 달력 기준) |
+| Fly.io | 신규 사용자 무료 티어 폐지, 카드 필수 |
+| Koyeb | 상시 무료는 맞으나 0.1 vCPU / 512MB / 인스턴스 1개 — 재배포 시 다운타임 |
+| **Vercel Hobby + Neon Free** | **채택.** 함수 60초, Neon 은 만료 없음·카드 불필요 |
+
+- Vercel Hobby 는 **상업적 이용 금지** 조항이 있고 실제로 계정을 정지시킨다.
+  이 프로젝트는 **수익화 계획 없음**을 확인하고 선택했다. 수익화하면 Koyeb 으로 옮겨야 한다.
+- rate limit 저장소로 Upstash 를 붙일 뻔했으나, **Neon Postgres 에 테이블 하나 두는 것으로
+  해결**해서 의존성을 늘리지 않았다.
+
+**② 요청량 제한 도입 (`lib/ratelimit.ts`, `rate_limits` 테이블)**
+
+- 없으면 공개 URL 이 되는 순간 누구나 Gemini 비용을 무제한으로 태울 수 있었다.
+- **DB 고정 윈도 카운터.** 서버리스에서는 인스턴스가 매 요청 갈아치워질 수 있어
+  인메모리 카운터가 무의미하다.
+- 게이트는 GitHub·Gemini 호출 **앞**에 둔다. 일을 끝낸 뒤 거절하면 비용은 이미 나갔다.
+- 좁은 규칙부터 검사하고 **앞에서 걸린 요청은 뒤 카운터를 세지 않는다** —
+  차단된 요청이 전역 한도를 축내면 공격자가 서비스 전체를 멈출 수 있다.
+- IP 는 원문 저장하지 않고 `SESSION_SECRET` 을 키로 HMAC 해서 앞 22자만 남긴다.
+- 카운터 갱신 실패 시 **문을 닫는다(503)**. 비용 방어가 목적인데 셀 수 없다고 통과시키면
+  막으려던 상황이 그대로 벌어진다. 이 함수만 `handlePgError` 를 쓰지 않는 이유도 같다 —
+  SQLite 로 조용히 폴백하면 인스턴스마다 카운터가 따로 생겨 제한이 사라진다.
+- **실측 검증**: PostgreSQL·SQLite 양쪽 UPSERT 동작 확인, **동시 20건 요청에도 카운트 정확(20)**,
+  실제 API 로 한도 초과 시 429 + `Retry-After` 확인, 다른 IP 는 영향 없음 확인.
+
+**③ 공유 링크 메타태그 실동작화 (`app/result/[id]/`)**
+
+- `/result/[id]` 가 통째로 클라이언트 컴포넌트라 **카카오톡·트위터가 링크를 펼칠 때
+  사이트 공통 메타태그만 읽어 갔다** — 어떤 카드를 공유하든 미리보기가 전부 같았다.
+  공유가 핵심인 서비스에서 기능이 죽어 있던 셈이다.
+- `page.tsx` 를 서버 컴포넌트로 바꿔 `generateMetadata` 를 붙이고, 화면은
+  `ResultView.tsx` (클라이언트)로 분리했다. DB 조회는 `react/cache` 로 요청당 1회.
+- 서버가 이미 조회하므로 클라이언트의 `/api/evaluations/[id]` 왕복이 사라졌다.
+  localStorage 보조 경로는 서버가 못 찾았을 때만 동작하도록 남겼다.
+- 검증: 실제 카드 ID 로 `<title>`·`og:title`·`og:description`·`twitter:*` 가 카드별로
+  다르게 렌더됨을 확인. 없는 ID 는 "찾을 수 없는 카드".
+
+**④ 배포 사고로 이어질 두 가지 수정**
+
+- **`node:sqlite` 를 지연 로드로** (`lib/db/database.ts`) — top-level import 라
+  PostgreSQL 만 쓰는 배포에서도 런타임이 Node 22.5 미만이면 **모듈 로드 단계에서 앱 전체가
+  죽었다.** SQLite 경로를 탈 때만 부르도록 바꿔 런타임 버전 제약이 사라졌다.
+- **세션 쿠키 secure 판정 변경** (`lib/auth/session.ts`) — 기존에는 `NEXT_PUBLIC_SITE_URL` 이
+  https 로 시작하는지를 봤는데, 이 변수는 **빌드 시점에 값이 박힌다.** 대시보드에 나중에
+  넣거나 빌드에 전달되지 않으면 **운영인데도 플래그가 영영 안 켜져 세션 쿠키가 평문으로
+  오간다.** 운영에서 기본으로 켜고, 로컬 http 확인 시에만 `COOKIE_SECURE=false` 로 끈다.
+  (이 빌드타임 각인은 실측으로 재현했다 — 런타임에 환경변수를 줬는데 `og:url` 이
+  `localhost:3000` 으로 나왔다.)
+- `app/layout.tsx` 에 `metadataBase` 추가. `NEXT_PUBLIC_SITE_URL` → `SITE_URL` →
+  Vercel 자동 도메인 순으로 본다.
+
+**⑤ 회귀 검사**
+
+- `npm run verify:auth` **32 PASS / 0 FAIL** (새 빌드 대상으로 재실행하여 확인).
+  > ⚠️ **함정**: 이 스크립트는 `http://localhost:3000` 을 **하드코딩**해서 친다.
+  > 빌드만 하고 서버를 재시작하지 않으면 **옛 빌드를 검사하고 통과한다.** 실제로 한 번 겪었다.
+
+**남은 배포 전 조치 (사용자만 할 수 있는 것)**
+
+1. **API 키 재발급** — 과거 이 문서에 평문 노출됐던 Gemini/Vertex 키가 아직 그대로다.
+2. **Neon 프로젝트 생성** → pooler 연결 문자열 확보 → `npm run db:migrate` 로 이관.
+3. **Vercel 연결** 및 환경 변수 입력 (`DATABASE_URL`, `SESSION_SECRET`(신규 생성),
+   `GEMINI_API_KEY`(재발급분), `NEXT_PUBLIC_SITE_URL`, `DISABLE_DEMO_LOGIN=true`).
+   `NEXT_PUBLIC_SITE_URL` 은 **첫 빌드 전에** 넣어야 한다.
+4. **배포 후** 원격 DB 대상으로 `npm run set-password` 실행 — 새 DB 는 시드가
+   `mock_pw_hash` 라 관리자 계정이 로그인 불가 상태로 시작한다.
+5. **`/docs` 공개 범위 판단** — `TECH_SPEC.md`·`FINAL_CHECKLIST.md` 가 공개 대상이다
+   (`lib/docs.ts` 화이트리스트). 내부 아키텍처와 보안 점검 내역이 그대로 노출된다.

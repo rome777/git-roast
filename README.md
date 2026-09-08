@@ -114,9 +114,14 @@ SESSION_SECRET=your_super_secret_signing_key_here
 # PostgreSQL 연결 문자열 (선택: 미입력 시 data/gitroast.db SQLite로 자동 동작)
 DATABASE_URL=postgresql://postgres:password@localhost:5432/gitroast
 
-# 앱 주소
+# 앱 주소 (공유 링크 미리보기의 기준 주소)
+# 주의: NEXT_PUBLIC_ 접두사 변수는 빌드 시점에 값이 코드에 박힙니다.
+# 배포 후에 바꾸려면 재배포가 필요합니다.
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
+
+전체 항목과 설명은 [`.env.example`](./.env.example) 을 참고하세요.
+분석 요청량 상한(`RATE_LIMIT_*`)은 미설정 시 기본값으로 동작하므로 로컬 실행에는 따로 넣지 않아도 됩니다.
 
 ### 4. 로컬 실행 (Run)
 ```bash
@@ -137,6 +142,7 @@ npm start
 - **세션 위변조 방지**: 세션 쿠키는 HMAC-SHA256으로 서명되며 `httpOnly`, `sameSite: lax` 속성으로 XSS 및 탈취를 방어합니다.
 - **권한 재검증**: 관리자 권한(`admin`) 판정 시 쿠키의 payload를 맹신하지 않고 항상 DB의 실시간 Role을 재조회합니다.
 - **비공개 리포지토리 안전**: 현재 서비스는 공개(Public) 리포지토리만 조회하도록 제한되어 있어 비공개 소스코드가 의도치 않게 노출되지 않습니다.
+- **분석 요청량 제한**: 분석 1건마다 AI 추론 비용이 발생하므로, IP·계정·서비스 전체 단위로 요청 횟수 상한을 둡니다. 한도를 넘으면 `429` 와 함께 재시도 가능 시각을 알려 줍니다. 제한 카운터에 IP 원문은 저장하지 않고 복원 불가능한 해시만 남깁니다.
 
 ---
 
