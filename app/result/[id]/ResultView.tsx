@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { EvaluationResult } from "@/lib/ai/types";
 import { EvaluationCard } from "@/components/evaluation/EvaluationCard";
+import { ModeSuggestion } from "@/components/evaluation/ModeSuggestion";
 import { ArrowLeft, Sparkles } from "lucide-react";
 
 /**
@@ -82,6 +83,10 @@ export function ResultView({
 
       {/* Main Card View */}
       <EvaluationCard data={evaluation} />
+
+      {/* 공유 링크로 들어온 사람에게도 반대쪽 맛을 권한다.
+          이 화면에는 분석 기능이 없으므로 메인으로 딥링크한다. */}
+      <ModeSuggestion data={evaluation} />
     </div>
   );
 }

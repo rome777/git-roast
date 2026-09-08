@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Flame,
   Briefcase,
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { EvaluationMode, EvaluationResult } from "@/lib/ai/types";
 import { EvaluationCard } from "@/components/evaluation/EvaluationCard";
+import { ModeSuggestion } from "@/components/evaluation/ModeSuggestion";
 
 const SAMPLE_TARGETS = [
   {
@@ -70,6 +71,26 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   const isRepoDetected = username.trim().includes("/") || username.trim().includes("github.com");
+
+  // 공유 카드 등에서 넘어온 딥링크(/?target=...&mode=...)를 한 번만 처리한다.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get("target");
+    const linkMode = params.get("mode");
+    if (!target) return;
+
+    const resolved: EvaluationMode = linkMode === "review" ? "review" : "roast";
+    setUsername(target);
+    setMode(resolved);
+    handleAnalyze(target, resolved);
+    // 주소창에 쿼리를 남기지 않는다. 새로고침할 때마다 다시 분석되면 곤란하다.
+    window.history.replaceState({}, "", "/");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAnalyze = async (targetInput?: string, targetMode?: EvaluationMode) => {
     const target = targetInput || username;
@@ -290,6 +311,17 @@ export default function HomePage() {
             data={result}
             onBookmark={() => {
               alert("현재 평가 카드가 내 히스토리에 보관되었습니다!");
+            }}
+          />
+
+          {/* 한쪽 맛만 보고 끝내지 않도록 반대쪽을 권한다. */}
+          <ModeSuggestion
+            data={result}
+            busy={loading}
+            onTryOther={(target, otherMode) => {
+              setUsername(target);
+              setMode(otherMode);
+              handleAnalyze(target, otherMode);
             }}
           />
         </section>

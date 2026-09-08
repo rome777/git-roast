@@ -1,6 +1,6 @@
 # 📋 GitRoast 실시간 인수인계 문서 (HANDOVER.md)
 
-> **최종 갱신 시각**: 2026-09-08 19:00:00 (KST)  
+> **최종 갱신 시각**: 2026-09-08 19:40:00 (KST)  
 > **프로젝트 위치**: `c:\aiffel_work\git-roast` (NTFS Junction: `c:\aiffel_work\business`)  
 > **현재 서버 상태**: 운영은 Vercel 에서 상시 가동. 로컬 서버는 떠 있지 않다 — 필요하면 `npm run build && npm start` (프로덕션 빌드를 http 로 볼 때는 `COOKIE_SECURE=false`)  
 > **현재 DB**: **PostgreSQL 17** (로컬 5432, `gitroast` DB) — 관리자 콘솔에 `🐘 PostgreSQL 활성화` 표시  
@@ -930,3 +930,41 @@ DATABASE_URL="$TARGET_DATABASE_URL" npm run set-password -- admin@gitroast.dev "
   비밀번호를 보내지 않고도 붙일 수 있다.
 - **4번 CAPTCHA**: 미적용. 현재는 요청량 제한만으로 막고 있다.
 - **7번 백업**: Neon 무료 플랜의 복원 범위 확인 필요.
+
+---
+
+### 2026-09-08 — 다른 맛 교차 제안 (ModeSuggestion)
+
+한쪽 맛으로 분석하고 끝내면 서비스의 절반만 본 셈이다. 결과 카드 바로 아래에서
+**같은 대상의 반대쪽 맛**을 권한다.
+
+- `components/evaluation/ModeSuggestion.tsx` (신규)
+- **메인(`app/page.tsx`)**: 버튼. 누르면 같은 대상을 반대 모드로 즉시 재분석하고
+  모드 토글도 함께 바뀐다.
+- **공유 카드(`app/result/[id]/ResultView.tsx`)**: 이 화면에는 분석 기능이 없으므로
+  메인으로 딥링크(`/?target=...&mode=...`)한다. 공유 링크로 유입된 사람이 바로
+  자기 분석으로 넘어가는 경로가 된다.
+- **이미 양쪽을 다 본 대상이면 표시하지 않는다.** `localStorage` 의 `gitroast_history`
+  에서 같은 대상 · 반대 모드 기록을 찾아 판단한다. 다 본 사람에게 계속 권하면 잔소리가 된다.
+  이 판단은 마운트 후에 한다 — 서버에는 `localStorage` 가 없어 하이드레이션이 어긋난다.
+
+**딥링크 처리 방식**
+
+`useSearchParams` 를 쓰면 메인 페이지가 정적 생성에서 빠진다. 그래서 마운트 후
+`window.location.search` 로 읽고, 처리한 뒤 `history.replaceState` 로 쿼리를 지운다
+(새로고침할 때마다 다시 분석되면 곤란하다). 빌드 결과에서 `/` 가 여전히 `○ (Static)` 인 것을 확인했다.
+
+**검증 (로컬 프로덕션 빌드, 브라우저 실동작)**
+
+| 항목 | 결과 |
+| :--- | :--- |
+| 딥링크 `/?target=...&mode=roast` 진입 | 자동 분석 실행, 주소창 쿼리 제거됨 |
+| 매운맛 카드 아래 제안 문구 | "매운맛으로 보셨네요. 💼 순한맛으로도 분석하기" |
+| 제안 클릭 | 같은 대상 순한맛 실행 → S/88 카드 생성 |
+| 양쪽 다 본 뒤 | 제안이 사라짐 |
+| 공유 카드(`/result/[id]`) | `<a href="/?target=rome777%2Faiffel_test&mode=roast">` 로 렌더 |
+
+> 브라우저 스크린샷이 이 환경에서 빈 화면으로만 캡처돼, DOM 의 `getBoundingClientRect`
+> 와 `getComputedStyle` 로 가시성(896×72, visible, opacity 1)을 확인했다.
+
+회귀: 33 PASS / 1 FAIL (남은 1건은 보류 결정된 admin 비밀번호 항목).

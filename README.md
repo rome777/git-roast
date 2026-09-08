@@ -70,7 +70,7 @@ git-roast/
 │   ├── result/[id]/                  # 공유 카드 (page.tsx 서버 렌더 + 카드별 OG 태그, ResultView.tsx 화면)
 │   └── api/                          # Next.js API Routes (analyze, auth, admin, history)
 ├── components/
-│   ├── evaluation/                   # EvaluationCard, RadarChart, TierBadge
+│   ├── evaluation/                   # EvaluationCard, RadarChart, TierBadge, ModeSuggestion
 │   └── layout/                       # Navbar, Footer
 ├── lib/
 │   ├── ai/                           # evaluator.ts (Gemini 연동), prompts.ts
