@@ -8,6 +8,15 @@ import { saveEvaluationToDb } from "@/lib/db/database";
 import { getSession } from "@/lib/auth/session";
 import { enforceAnalyzeRateLimit } from "@/lib/ratelimit";
 
+/**
+ * 이 라우트는 GitHub API 를 여러 번 치고 Gemini 추론을 기다린다.
+ * 실측(2026-09-08, 로컬): 리포 분석 6.8초, 사용자 분석 4.9초.
+ * 서버리스 콜드스타트와 DB 웨이크업을 얹어도 여유가 있지만, 호스팅의 기본
+ * 타임아웃(Vercel Hobby 는 기본값이 상한보다 낮을 수 있다)에 기대지 않도록
+ * 상한을 명시한다.
+ */
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
