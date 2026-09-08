@@ -1,6 +1,6 @@
 # 📋 GitRoast 실시간 인수인계 문서 (HANDOVER.md)
 
-> **최종 갱신 시각**: 2026-09-08 15:00:00 (KST)  
+> **최종 갱신 시각**: 2026-09-08 15:13:00 (KST)  
 > **프로젝트 위치**: `c:\aiffel_work\git-roast` (NTFS Junction: `c:\aiffel_work\business`)  
 > **현재 서버 상태**: `http://localhost:3000` (Next.js 14 프로덕션 빌드 가동 중)  
 > **현재 DB**: **PostgreSQL 17** (로컬 5432, `gitroast` DB) — 관리자 콘솔에 `🐘 PostgreSQL 활성화` 표시
@@ -446,4 +446,18 @@ c:\aiffel_work\git-roast\
    - 메인 화면에 "비공개 리포지토리 분석용 GitHub 토큰 입력 (선택)" 인풋 제공.
    - 서버 DB에 저장하지 않고 해당 API 호출 시 1회용 메모리로만 사용 후 폐기.
    - **효과**: OAuth 앱 심사나 추가 인증 인프라 없이 즉시 구현 가능하나, 사용자가 직접 PAT를 발급해야 하는 UX 허들 존재.
+
+---
+
+### 2026-09-08 — 메인 UI 문구 단일화, 루트 README.md 작성 및 GitHub Public 배포 완료
+
+1. **메인 페이지 UI 문구 중복 제거 및 단일화 (`app/page.tsx`)**:
+   - 상단 뱃지와 하단 안내문 간의 중복 문구를 정리하고, 분석창 바로 아래에 요청하신 정확한 단일 문구만 배치:
+     > `공개(Public) 리포지토리만 분석 가능합니다`
+2. **루트 `README.md` 및 `LICENSE` (MIT) 생성**:
+   - 프로젝트 개요, 듀얼 AI 모드(매운맛 팩폭/순한맛 리뷰), `SPEC.md` 타깃 분석, 기술 스택, 아키텍처, 로컬 실행 가이드(`node >= 22.5.0`) 포함한 공식 문서 작성 완료.
+3. **GitHub Public 원격 리포지토리 생성 및 최초 푸시 완료**:
+   - 저장소 URL: [`https://github.com/rome777/git-roast`](https://github.com/rome777/git-roast)
+   - `.env.local`, DB 파일 등 보안 민감 파일은 철저히 배제된 상태로 깨끗하게 Public Push 완료.
+
 
