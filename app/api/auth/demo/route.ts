@@ -19,7 +19,10 @@ export async function POST() {
 
     let user = await getUserByEmailFromDb(DEMO_EMAIL);
     if (!user) {
-      user = await createUserInDb(DEMO_EMAIL, await hashPassword(randomBytes(24).toString("hex")));
+      // 확인 메일을 받을 사람이 없는 계정이다. 확인 완료로 만들어 둔다.
+      user = await createUserInDb(DEMO_EMAIL, await hashPassword(randomBytes(24).toString("hex")), {
+        emailVerified: true,
+      });
     }
     if (!user) {
       return NextResponse.json({ error: "데모 계정을 준비하지 못했습니다." }, { status: 500 });

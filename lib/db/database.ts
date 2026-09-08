@@ -65,6 +65,7 @@ async function initPgSchema(pool: Pool) {
       email VARCHAR(255) UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       role VARCHAR(50) NOT NULL DEFAULT 'user',
+      email_verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
@@ -99,14 +100,16 @@ async function initPgSchema(pool: Pool) {
     );
   `);
 
+  await ensureEmailVerifiedColumnPg(pool);
+
   // Seed default admin users if table is empty
   const res = await pool.query("SELECT count(*) as count FROM users;");
   if (parseInt(res.rows[0].count, 10) === 0) {
     const now = new Date().toISOString();
     await pool.query(
-      `INSERT INTO users (id, email, password_hash, role, created_at) VALUES 
-       ($1, $2, $3, $4, $5),
-       ($6, $7, $8, $9, $10)
+      `INSERT INTO users (id, email, password_hash, role, email_verified, created_at) VALUES
+       ($1, $2, $3, $4, TRUE, $5),
+       ($6, $7, $8, $9, TRUE, $10)
        ON CONFLICT (email) DO NOTHING;`,
       [
         "user-rome777", "rome777@gmail.com", "mock_pw_hash", "admin", now,
@@ -116,6 +119,36 @@ async function initPgSchema(pool: Pool) {
   }
 
   pgInitialized = true;
+}
+
+/**
+ * users.email_verified 를 나중에 추가한다 (2026-09-08).
+ *
+ * 그냥 `ADD COLUMN ... DEFAULT FALSE` 만 하면 **이미 가입해 쓰고 있던 사람들이 전부
+ * 미확인이 되어 로그인에서 잠긴다.** 컬럼이 없던 DB 에 처음 붙이는 순간에만
+ * 그 시점 이전에 만들어진 계정을 확인 완료로 소급 처리한다.
+ *
+ * 기준 시각을 ALTER 전에 찍어 두는 이유: 서버리스에서 인스턴스 두 개가 동시에
+ * 초기화하더라도, 그 사이에 새로 가입한 계정까지 덩달아 확인 완료가 되지 않게 하려는 것.
+ */
+async function ensureEmailVerifiedColumnPg(pool: Pool) {
+  const exists = await pool.query(
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email_verified';`
+  );
+  if (exists.rowCount) return;
+
+  const cutoff = new Date().toISOString();
+  await pool.query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;`
+  );
+  const updated = await pool.query(
+    `UPDATE users SET email_verified = TRUE WHERE created_at < $1;`,
+    [cutoff]
+  );
+  console.info(
+    `[db] users.email_verified 추가 — 기존 계정 ${updated.rowCount}건을 확인 완료로 처리했습니다.`
+  );
 }
 
 // 2. SQLite Fallback Engine
@@ -162,6 +195,7 @@ function initSqliteSchema(db: any) {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
+      email_verified INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
 
@@ -195,31 +229,31 @@ function initSqliteSchema(db: any) {
     );
   `);
 
+  ensureEmailVerifiedColumnSqlite(db);
+
   const checkUser = db.prepare("SELECT count(*) as count FROM users;").get() as { count: number };
   if (!checkUser || checkUser.count === 0) {
     const now = new Date().toISOString();
-    db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?);").run(
-      "user-rome777",
-      "rome777@gmail.com",
-      "mock_pw_hash",
-      "admin",
-      now
+    // 컬럼을 이름으로 지정한다. `INSERT INTO users VALUES (...)` 처럼 위치로만 넣으면
+    // 컬럼이 하나 늘어나는 순간 조용히 깨진다(실제로 email_verified 를 붙이며 겪었다).
+    const seed = db.prepare(
+      "INSERT INTO users (id, email, password_hash, role, email_verified, created_at) VALUES (?, ?, ?, ?, 1, ?);"
     );
-    db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?);").run(
-      "user-admin",
-      "admin@gitroast.dev",
-      "mock_pw_hash",
-      "admin",
-      now
-    );
-    db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?);").run(
-      "user-rookie",
-      "rookie@example.com",
-      "mock_pw_hash",
-      "user",
-      now
-    );
+    seed.run("user-rome777", "rome777@gmail.com", "mock_pw_hash", "admin", now);
+    seed.run("user-admin", "admin@gitroast.dev", "mock_pw_hash", "admin", now);
+    seed.run("user-rookie", "rookie@example.com", "mock_pw_hash", "user", now);
   }
+}
+
+/** PostgreSQL 쪽 ensureEmailVerifiedColumnPg 와 같은 일. 설명은 그쪽 주석 참조. */
+function ensureEmailVerifiedColumnSqlite(db: any) {
+  const cols = db.prepare("PRAGMA table_info(users);").all() as Array<{ name: string }>;
+  if (cols.some((c) => c.name === "email_verified")) return;
+
+  const cutoff = new Date().toISOString();
+  db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0;");
+  db.prepare("UPDATE users SET email_verified = 1 WHERE created_at < ?;").run(cutoff);
+  console.info("[db] users.email_verified 추가 — 기존 계정을 확인 완료로 처리했습니다.");
 }
 
 // ----------------------------------------------------
@@ -573,15 +607,22 @@ export function isAdminEmail(email: string): boolean {
   return ADMIN_EMAILS.includes(email.trim().toLowerCase());
 }
 
-/** 신규 가입. 이미 있으면 null 을 돌려준다(호출부에서 409 처리). */
+/**
+ * 신규 가입. 이미 있으면 null 을 돌려준다(호출부에서 409 처리).
+ *
+ * `emailVerified` 는 사람이 확인 링크를 누르지 않아도 되는 계정(데모 계정 등)에만 쓴다.
+ * 일반 가입은 기본값 false 로 두고 확인 메일을 거쳐야 한다.
+ */
 export async function createUserInDb(
   email: string,
-  passwordHash: string
+  passwordHash: string,
+  opts: { emailVerified?: boolean } = {}
 ): Promise<{ id: string; email: string; role: string } | null> {
   const normalized = email.trim().toLowerCase();
   const role = isAdminEmail(normalized) ? "admin" : "user";
   const id = `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
+  const verified = opts.emailVerified === true;
 
   const existing = await getUserByEmailFromDb(normalized);
   if (existing) return null;
@@ -591,11 +632,11 @@ export async function createUserInDb(
       const pool = getPgPool();
       await initPgSchema(pool);
       const res = await pool.query(
-        `INSERT INTO users (id, email, password_hash, role, created_at)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO users (id, email, password_hash, role, email_verified, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (email) DO NOTHING
          RETURNING id, email, role;`,
-        [id, normalized, passwordHash, role, now]
+        [id, normalized, passwordHash, role, verified, now]
       );
       return res.rows[0] || null;
     } catch (err) {
@@ -604,8 +645,46 @@ export async function createUserInDb(
   }
 
   const db = getSqliteDb();
-  db.prepare(`INSERT INTO users VALUES (?, ?, ?, ?, ?);`).run(id, normalized, passwordHash, role, now);
+  db.prepare(
+    `INSERT INTO users (id, email, password_hash, role, email_verified, created_at)
+     VALUES (?, ?, ?, ?, ?, ?);`
+  ).run(id, normalized, passwordHash, role, verified ? 1 : 0, now);
   return { id, email: normalized, role };
+}
+
+/**
+ * 두 엔진의 boolean 표현을 한 곳에서 흡수한다.
+ * PostgreSQL 은 true/false 를, SQLite 는 1/0 정수를 돌려준다.
+ */
+export function isUserEmailVerified(user: { email_verified?: unknown } | null | undefined): boolean {
+  const v = user?.email_verified;
+  return v === true || v === 1 || v === "1" || v === "t" || v === "true";
+}
+
+/** 확인 링크를 눌렀을 때 호출. 이미 확인된 계정이면 아무 변화가 없다(멱등). */
+export async function setEmailVerifiedInDb(email: string): Promise<boolean> {
+  const normalized = email.trim().toLowerCase();
+
+  if (isPostgresConfigured()) {
+    try {
+      const pool = getPgPool();
+      await initPgSchema(pool);
+      const res = await pool.query(
+        `UPDATE users SET email_verified = TRUE WHERE LOWER(email) = LOWER($1);`,
+        [normalized]
+      );
+      return (res.rowCount ?? 0) > 0;
+    } catch (err) {
+      handlePgError("setEmailVerified", err);
+      return false;
+    }
+  }
+
+  const db = getSqliteDb();
+  const before = db.prepare(`SELECT id FROM users WHERE LOWER(email) = LOWER(?);`).get(normalized);
+  if (!before) return false;
+  db.prepare(`UPDATE users SET email_verified = 1 WHERE LOWER(email) = LOWER(?);`).run(normalized);
+  return true;
 }
 
 /** 레거시 자리표시자(mock_pw_hash) 계정이 첫 로그인에서 비밀번호를 확정할 때 사용. */

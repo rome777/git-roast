@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { EvaluationMode, EvaluationResult } from "@/lib/ai/types";
 import { Flame, Briefcase, ArrowRight } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 
 /**
  * 한쪽 맛으로 분석하고 나면 같은 대상의 다른 맛을 권한다.
@@ -73,7 +74,11 @@ export function ModeSuggestion({
 
   const inner = (
     <>
-      <Icon className={`w-5 h-5 xl:w-6 xl:h-6 shrink-0 ${iconColor}`} />
+      {busy ? (
+        <Spinner className={`w-5 h-5 xl:w-6 xl:h-6 ${iconColor}`} />
+      ) : (
+        <Icon className={`w-5 h-5 xl:w-6 xl:h-6 shrink-0 ${iconColor}`} />
+      )}
       <span className="flex-1 text-left">
         <span className="block text-xs xl:text-sm font-bold text-white">
           {copy.headline} {busy ? "분석하는 중..." : copy.label}

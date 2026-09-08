@@ -113,10 +113,13 @@ function tooMany(rule: Rule, now: Date): RateLimitVerdict {
  *
  * IP 뿐 아니라 **대상 이메일별로도** 센다. 분산 IP 로 한 계정을 노리는 경우
  * IP 카운터만으로는 막히지 않기 때문이다.
+ *
+ * `resend`(확인 메일 재발송)는 남의 주소로 메일을 퍼붓는 통로가 될 수 있어
+ * 대상 계정 한도를 훨씬 좁게 잡는다.
  */
 export async function enforceAuthRateLimit(
   req: NextRequest,
-  action: "login" | "signup",
+  action: "login" | "signup" | "resend",
   email?: string
 ): Promise<RateLimitVerdict> {
   const now = new Date();
@@ -149,6 +152,17 @@ export async function enforceAuthRateLimit(
       limit: limitFromEnv("RATE_LIMIT_LOGIN_ACCOUNT_HOUR", 20),
       resetAt: hourEnd,
       message: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+    });
+  }
+
+  // 재발송은 "남의 메일함에 폭탄 보내기" 가 되지 않도록 대상 주소당 시간 3회로 묶는다.
+  if (action === "resend" && email) {
+    const target = hashIp(email.trim().toLowerCase());
+    rules.push({
+      bucket: `auth:resend:acct:${target}:h:${hour}`,
+      limit: limitFromEnv("RATE_LIMIT_RESEND_ACCOUNT_HOUR", 3),
+      resetAt: hourEnd,
+      message: "확인 메일 재발송이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
     });
   }
 

@@ -93,6 +93,33 @@ if (!isLocal) {
     : warn("DISABLE_DEMO_LOGIN", "true 가 아님 — 누구나 데모 계정으로 로그인할 수 있습니다");
 }
 
+// ---------------------------------------------------------------- 3-1. 가입 방어 (보안 수칙 2·3·4번)
+const mailerOn = Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
+const verifyMode = process.env.REQUIRE_EMAIL_VERIFICATION;
+const verifyOn = verifyMode === "true" || (verifyMode !== "false" && mailerOn);
+
+if (mailerOn) ok("메일 발송(Resend)", `MAIL_FROM=${process.env.MAIL_FROM}`);
+else if (process.env.RESEND_API_KEY || process.env.MAIL_FROM)
+  fail("메일 발송(Resend)", "RESEND_API_KEY 와 MAIL_FROM 은 둘 다 있어야 합니다");
+else warn("메일 발송(Resend)", "없음 — 이메일 확인 메일을 보낼 수 없습니다");
+
+// 메일을 못 보내는데 확인을 강제하면 아무도 로그인할 수 없다. 배포를 막는다.
+if (verifyMode === "true" && !mailerOn)
+  fail("이메일 확인", "REQUIRE_EMAIL_VERIFICATION=true 인데 메일 발송 설정이 없습니다 — 아무도 가입/로그인할 수 없습니다");
+else if (verifyOn) ok("이메일 확인", verifyMode === "true" ? "강제(true)" : "자동(메일 설정 있음)");
+else warn("이메일 확인", "꺼짐 — 아무 이메일로나 가입됩니다");
+
+const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+const captchaSecret = process.env.TURNSTILE_SECRET_KEY;
+if (siteKey && captchaSecret) ok("CAPTCHA(Turnstile)", "사이트 키 + 시크릿 모두 설정됨");
+else if (siteKey || captchaSecret)
+  fail("CAPTCHA(Turnstile)", `${siteKey ? "시크릿" : "사이트 키"}가 없습니다 — 한쪽만으로는 켜지지 않습니다`);
+else warn("CAPTCHA(Turnstile)", "없음 — 자동 가입은 요청량 제한으로만 막습니다");
+
+process.env.DISABLE_PWNED_CHECK === "true"
+  ? warn("비밀번호 유출 검사", "DISABLE_PWNED_CHECK=true 로 꺼져 있습니다")
+  : ok("비밀번호 유출 검사", "켜짐 (HaveIBeenPwned k-익명성)");
+
 // ---------------------------------------------------------------- 4. 데이터베이스
 if (!dbUrl?.startsWith("postgres")) {
   fail("DATABASE_URL", "PostgreSQL 접속 문자열이 없습니다 (배포에서 SQLite 는 재배포 때 사라집니다)");
@@ -105,6 +132,11 @@ if (!dbUrl?.startsWith("postgres")) {
 
   if (!isLocalDb && host.includes("neon.tech") && !host.includes("-pooler"))
     warn("Neon 연결 방식", "pooled 문자열이 아닙니다 — 서버리스에서 커넥션이 고갈될 수 있습니다 (-pooler 호스트 권장)");
+
+  // 보안 수칙 7번(백업). Neon 무료 플랜은 **복원 창이 6시간뿐이고 예약 백업이 없다.**
+  // 하루가 지난 실수는 되돌릴 수 없으므로, 배포 점검 때마다 사실을 다시 알린다.
+  if (!isLocalDb && host.includes("neon.tech"))
+    warn("Neon 백업 범위", "무료 플랜은 복원 창 6시간 + 예약 백업 없음 — 별도 pg_dump 백업이 필요합니다");
 
   const pool = new pg.Pool({
     connectionString: dbUrl,
@@ -123,7 +155,16 @@ if (!dbUrl?.startsWith("postgres")) {
       : ok("스키마", "테이블 4개 모두 존재");
 
     if (t.includes("users")) {
-      const users = (await pool.query(`SELECT email, role, password_hash FROM users;`)).rows;
+      const cols = (await pool.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='users';`
+      )).rows.map((r) => r.column_name);
+      const hasVerified = cols.includes("email_verified");
+      hasVerified ? ok("users.email_verified", "존재")
+        : warn("users.email_verified", "없음 — 앱 첫 기동 시 추가되고 기존 계정은 확인 완료로 처리됩니다");
+
+      const users = (await pool.query(
+        `SELECT email, role, password_hash${hasVerified ? ", email_verified" : ""} FROM users;`
+      )).rows;
       const admins = users.filter((u) => u.role === "admin");
       const unset = users.filter((u) => !u.password_hash?.startsWith("scrypt$"));
       const testers = users.filter((u) => /^tester-\d+@/.test(u.email));
@@ -136,6 +177,14 @@ if (!dbUrl?.startsWith("postgres")) {
 
       testers.length ? warn("테스트 계정 잔존", `${testers.length}건 — 회귀 검사가 남긴 계정입니다`)
         : ok("테스트 계정 잔존", "없음");
+
+      // 확인을 강제하는 배포에서 관리자가 미확인이면 /admin 에 아무도 못 들어간다.
+      if (hasVerified && verifyOn) {
+        const blockedAdmins = admins.filter((u) => u.email_verified !== true);
+        blockedAdmins.length
+          ? fail("관리자 이메일 확인", `${blockedAdmins.map((a) => a.email).join(", ")} — 미확인이라 로그인할 수 없습니다`)
+          : ok("관리자 이메일 확인", "모두 확인됨");
+      }
     }
   } catch (err) {
     fail("DB 접속", err.message);

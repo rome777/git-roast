@@ -4,11 +4,13 @@ import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Flame, History, LogIn, LogOut, User, Github, Shield } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 
 export function Navbar() {
   const pathname = usePathname();
   const [user, setUser] = useState<{ email: string; role?: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const checkAuth = useCallback(async () => {
     // 로그인 상태는 서버 세션(/api/auth/me) 하나만 신뢰한다.
@@ -46,6 +48,10 @@ export function Navbar() {
   }, [pathname, checkAuth]);
 
   const handleLogout = async () => {
+    if (loggingOut) return;
+    // 이동까지 끝나야 진짜 끝이므로 여기서는 다시 false 로 돌리지 않는다.
+    setLoggingOut(true);
+
     // httpOnly 세션 쿠키는 클라이언트에서 못 지운다. 서버에 만료를 요청한다.
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
 
@@ -110,6 +116,18 @@ export function Navbar() {
           <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
 
           {/* User Profile / Auth Action */}
+          {loading && (
+            // 빈칸으로 두면 세션 응답이 온 순간 버튼이 튀어나오며 내비게이션이 밀린다.
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 animate-pulse"
+            >
+              <span className="sr-only">로그인 상태를 확인하는 중입니다</span>
+              <div className="h-7 w-24 rounded-xl bg-slate-800/80" />
+              <div className="h-7 w-16 rounded-lg bg-slate-800/60" />
+            </div>
+          )}
           {!loading && (
             <>
               {user ? (
@@ -128,10 +146,16 @@ export function Navbar() {
                   </div>
                   <button
                     onClick={handleLogout}
-                    title="로그아웃"
-                    className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 transition-colors"
+                    disabled={loggingOut}
+                    aria-busy={loggingOut}
+                    title={loggingOut ? "로그아웃 중..." : "로그아웃"}
+                    className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 disabled:cursor-not-allowed transition-colors"
                   >
-                    <LogOut className="w-4 h-4" />
+                    {loggingOut ? (
+                      <Spinner className="w-4 h-4" label="로그아웃 중" />
+                    ) : (
+                      <LogOut className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               ) : (

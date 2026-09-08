@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserByEmailFromDb } from "@/lib/db/database";
+import { getUserByEmailFromDb, isUserEmailVerified } from "@/lib/db/database";
 import { verifyPassword, isLegacyPlaceholder, validatePassword } from "@/lib/auth/password";
+import { verifyCaptcha } from "@/lib/auth/captcha";
 import { attachSession } from "@/lib/auth/session";
+import { isEmailVerificationRequired } from "@/lib/auth/email-verification";
 import { enforceAuthRateLimit } from "@/lib/ratelimit";
 
 // 이메일/비밀번호 중 무엇이 틀렸는지 알려주지 않는다(계정 존재 여부 노출 방지).
@@ -9,7 +11,7 @@ const INVALID = "이메일 또는 비밀번호가 일치하지 않습니다.";
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
+    const { email, password, captchaToken } = await req.json();
 
     if (!email || typeof email !== "string" || !email.trim()) {
       return NextResponse.json({ error: "이메일을 입력해 주세요." }, { status: 400 });
@@ -22,6 +24,9 @@ export async function POST(req: NextRequest) {
     // 비밀번호 검증 앞에 둔다. 없으면 비밀번호를 무한히 추측할 수 있다.
     const verdict = await enforceAuthRateLimit(req, "login", trimmedEmail);
     if (!verdict.ok) return verdict.response;
+
+    const captcha = await verifyCaptcha(req, captchaToken);
+    if (!captcha.ok) return NextResponse.json({ error: captcha.error }, { status: 400 });
 
     const user = await getUserByEmailFromDb(trimmedEmail);
 
@@ -39,6 +44,19 @@ export async function POST(req: NextRequest) {
 
     if (!(await verifyPassword(password, user.password_hash))) {
       return NextResponse.json({ error: INVALID }, { status: 401 });
+    }
+
+    // 이메일 확인 게이트. **비밀번호가 맞은 뒤에** 본다 —
+    // 앞에 두면 "이 계정은 미확인"이라는 응답 자체가 계정 존재 여부를 알려 준다.
+    if (isEmailVerificationRequired() && !isUserEmailVerified(user)) {
+      return NextResponse.json(
+        {
+          error: "이메일 확인이 필요합니다. 가입 시 받은 메일의 링크를 눌러 주세요.",
+          verificationRequired: true,
+          email: user.email,
+        },
+        { status: 403 }
+      );
     }
 
     const sessionUser = { id: user.id, email: user.email, role: user.role };

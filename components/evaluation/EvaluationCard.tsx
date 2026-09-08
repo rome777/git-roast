@@ -24,6 +24,7 @@ import {
   GitBranch,
   Sparkles,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 
 interface EvaluationCardProps {
   data: EvaluationResult;
@@ -322,9 +323,14 @@ export function EvaluationCard({
           <button
             onClick={handleDownload}
             disabled={downloading}
+            aria-busy={downloading}
             className="flex items-center gap-2 px-5 xl:px-6 py-3 xl:py-3.5 rounded-2xl bg-slate-900 border border-slate-700 hover:border-slate-500 text-white font-bold text-xs sm:text-sm xl:text-base shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
-            <Download className="w-4 h-4 text-orange-400" />
+            {downloading ? (
+              <Spinner className="w-4 h-4 text-orange-400" />
+            ) : (
+              <Download className="w-4 h-4 text-orange-400" />
+            )}
             {downloading ? "카드 렌더링 중..." : "PNG 이미지 저장"}
           </button>
 

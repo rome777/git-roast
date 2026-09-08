@@ -41,11 +41,10 @@ export async function verifyPassword(password: string, stored: string): Promise<
   }
 }
 
-export const MIN_PASSWORD_LENGTH = 8;
-
-export function validatePassword(password: unknown): string | null {
-  if (typeof password !== "string" || !password) return "비밀번호를 입력해 주세요.";
-  if (password.length < MIN_PASSWORD_LENGTH)
-    return `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`;
-  return null;
-}
+export {
+  MIN_PASSWORD_LENGTH,
+  MAX_PASSWORD_LENGTH,
+  PASSWORD_RULES,
+  validatePassword,
+  validateNewPassword,
+} from "@/lib/auth/password-rules";

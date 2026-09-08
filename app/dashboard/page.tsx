@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { History, Bookmark, Sparkles, Trash2, ArrowRight, ExternalLink, Flame, Briefcase } from "lucide-react";
+import { Spinner, LoadingScreen } from "@/components/ui/Spinner";
 import { EvaluationResult } from "@/lib/ai/types";
 import { TierBadge } from "@/components/evaluation/TierBadge";
 
@@ -13,6 +14,7 @@ export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<{ email: string } | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     // 히스토리는 서버가 세션으로 소유자를 판정해 돌려준다.
@@ -59,11 +61,19 @@ export default function DashboardPage() {
   };
 
   const handleClearHistory = async () => {
-    if (confirm("모든 분석 히스토리를 DB에서 삭제하시겠습니까?")) {
-      try {
-        await fetch("/api/history", { method: "DELETE" });
-      } catch {}
+    if (clearing) return;
+    if (!confirm("모든 분석 히스토리를 DB에서 삭제하시겠습니까?")) return;
+
+    // 전체 삭제는 되돌릴 수 없다. 진행 중임을 보여 주지 않으면 사용자가
+    // 안 눌렸다고 생각해 한 번 더 누른다.
+    setClearing(true);
+    try {
+      await fetch("/api/history", { method: "DELETE" });
       setHistory([]);
+    } catch {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -74,11 +84,7 @@ export default function DashboardPage() {
   });
 
   if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center py-20 text-slate-400">
-        <span className="animate-pulse">보관함 불러오는 중...</span>
-      </div>
-    );
+    return <LoadingScreen message="보관함 불러오는 중..." />;
   }
 
   if (needsLogin) {
@@ -129,9 +135,19 @@ export default function DashboardPage() {
           {history.length > 0 && (
             <button
               onClick={handleClearHistory}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs xl:text-sm font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 border border-slate-800 transition-colors"
+              disabled={clearing}
+              aria-busy={clearing}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs xl:text-sm font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 disabled:opacity-60 disabled:cursor-not-allowed border border-slate-800 transition-colors"
             >
-              <Trash2 className="w-3.5 h-3.5" /> 비우기
+              {clearing ? (
+                <>
+                  <Spinner className="w-3.5 h-3.5" /> 비우는 중...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" /> 비우기
+                </>
+              )}
             </button>
           )}
           <Link

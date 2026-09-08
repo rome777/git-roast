@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { TierBadge } from "@/components/evaluation/TierBadge";
 
 interface AdminEvaluation {
@@ -55,6 +56,8 @@ export default function AdminPage() {
   const [selectedTargetType, setSelectedTargetType] = useState<"all" | "user" | "repo">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  /** 지금 삭제 요청이 나가 있는 행의 id. 행마다 따로 표시해야 어느 것이 지워지는지 안다. */
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [denied, setDenied] = useState<"unauthorized" | "forbidden" | null>(null);
 
   const fetchAdminData = async (filterEmail?: string) => {
@@ -99,10 +102,12 @@ export default function AdminPage() {
   };
 
   const handleDelete = async (id: string, targetName: string) => {
+    if (deletingId) return;
     if (!confirm(`'${targetName}' 평가 기록을 DB에서 영구 삭제하시겠습니까?`)) {
       return;
     }
 
+    setDeletingId(id);
     try {
       const res = await fetch(`/api/admin/evaluations?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -123,6 +128,8 @@ export default function AdminPage() {
       }
     } catch (err: any) {
       alert(err.message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -388,8 +395,13 @@ export default function AdminPage() {
 
       {/* Main Evaluations Table */}
       {loading ? (
-        <div className="p-12 text-center text-slate-400 text-sm animate-pulse">
-          데이터베이스에서 히스토리를 불러오는 중입니다...
+        <div
+          role="status"
+          aria-live="polite"
+          className="p-12 flex flex-col items-center justify-center gap-3 text-slate-400 text-sm"
+        >
+          <Spinner className="w-6 h-6 text-orange-500" />
+          <span className="animate-pulse">데이터베이스에서 히스토리를 불러오는 중입니다...</span>
         </div>
       ) : filteredList.length === 0 ? (
         <div className="p-12 text-center rounded-3xl bg-slate-900/40 border border-slate-800 text-slate-400 text-sm">
@@ -417,7 +429,10 @@ export default function AdminPage() {
                 return (
                   <tr
                     key={row.id}
-                    className="hover:bg-slate-800/40 transition-colors [&>td]:py-1.5 [&>td]:px-3 [&>td]:whitespace-nowrap [&>td]:align-middle"
+                    className={`hover:bg-slate-800/40 transition-all [&>td]:py-1.5 [&>td]:px-3 [&>td]:whitespace-nowrap [&>td]:align-middle ${
+                      // 어느 행이 지워지는 중인지 행 자체로도 보여 준다.
+                      deletingId === row.id ? "opacity-40" : ""
+                    }`}
                   >
                     {/* 작성자 */}
                     <td className="max-w-[190px]">
@@ -499,10 +514,16 @@ export default function AdminPage() {
                         </Link>
                         <button
                           onClick={() => handleDelete(row.id, row.target_name)}
-                          title="DB에서 영구 삭제"
-                          className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-950/20 transition-colors"
+                          disabled={deletingId !== null}
+                          aria-busy={deletingId === row.id}
+                          title={deletingId === row.id ? "삭제 중..." : "DB에서 영구 삭제"}
+                          className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-950/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {deletingId === row.id ? (
+                            <Spinner className="w-3.5 h-3.5 text-rose-400" label="삭제 중" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
                         </button>
                       </div>
                     </td>

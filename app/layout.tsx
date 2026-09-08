@@ -2,27 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-
-/**
- * 공유 링크 메타태그의 기준 주소.
- *
- * NEXT_PUBLIC_SITE_URL 이 정석이지만 빌드 시점에 값이 박히므로, 그게 비어 있을 때를
- * 대비해 Vercel 이 자동으로 주는 도메인까지 순서대로 본다.
- */
-function resolveSiteUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
-  if (explicit) return explicit;
-
-  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
-  if (vercel) return `https://${vercel}`;
-
-  return "http://localhost:3000";
-}
+import { resolveSiteUrl } from "@/lib/site-url";
 
 /**
  * 페이지별 openGraph.url 을 절대경로로 만들려면 기준 주소가 필요하다.
- * 배포 환경에서는 NEXT_PUBLIC_SITE_URL 을 https 주소로 반드시 넣어야 한다
- * (세션 쿠키의 secure 플래그도 이 값을 본다 — lib/auth/session.ts 참조).
+ * 배포 환경에서는 NEXT_PUBLIC_SITE_URL 을 https 주소로 반드시 넣어야 한다.
+ * 이메일 확인 링크도 같은 값을 쓴다 — 틀리면 메일의 링크가 localhost 를 가리킨다.
  */
 export const metadata: Metadata = {
   metadataBase: new URL(resolveSiteUrl()),

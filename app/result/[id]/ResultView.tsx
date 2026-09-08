@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { LoadingScreen } from "@/components/ui/Spinner";
 import Link from "next/link";
 import { EvaluationResult } from "@/lib/ai/types";
 import { EvaluationCard } from "@/components/evaluation/EvaluationCard";
@@ -41,11 +42,7 @@ export function ResultView({
   }, [id, initialEvaluation]);
 
   if (checkingLocal) {
-    return (
-      <div className="flex-1 flex items-center justify-center py-20 text-slate-400">
-        <span className="animate-pulse">평가 카드 불러오는 중...</span>
-      </div>
-    );
+    return <LoadingScreen message="평가 카드 불러오는 중..." />;
   }
 
   if (!evaluation) {
