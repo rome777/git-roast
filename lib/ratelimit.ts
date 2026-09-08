@@ -33,6 +33,7 @@ const LIMITS = {
   globalDay: () => limitFromEnv("RATE_LIMIT_GLOBAL_DAY", 500),
 };
 
+const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -103,6 +104,57 @@ function tooMany(rule: Rule, now: Date): RateLimitVerdict {
  * 계상은 "선증가 후판정"이다. 실패한 요청도 한 건으로 치므로 재시도로 상한을
  * 우회할 수 없다.
  */
+/**
+ * 인증 엔드포인트 요청량 제한.
+ *
+ * 로그인은 **횟수 제한이 없으면 비밀번호를 무한히 추측할 수 있다.** 실제로 운영에서
+ * 10회 연속 시도가 전부 통과하는 것을 확인했다(2026-09-08).
+ * 가입은 제한이 없으면 계정을 무제한으로 만들 수 있다.
+ *
+ * IP 뿐 아니라 **대상 이메일별로도** 센다. 분산 IP 로 한 계정을 노리는 경우
+ * IP 카운터만으로는 막히지 않기 때문이다.
+ */
+export async function enforceAuthRateLimit(
+  req: NextRequest,
+  action: "login" | "signup",
+  email?: string
+): Promise<RateLimitVerdict> {
+  const now = new Date();
+  const minuteEnd = new Date(Math.ceil(now.getTime() / MINUTE_MS) * MINUTE_MS);
+  const hourEnd = new Date(Math.ceil(now.getTime() / HOUR_MS) * HOUR_MS);
+  const minute = now.toISOString().slice(0, 16).replace(/[-T:]/g, "");
+  const hour = hourWindow(now);
+
+  const ip = hashIp(getClientIp(req));
+  const rules: Rule[] = [
+    {
+      bucket: `auth:${action}:ip:${ip}:m:${minute}`,
+      limit: limitFromEnv("RATE_LIMIT_AUTH_MINUTE", 5),
+      resetAt: minuteEnd,
+      message: "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+    },
+    {
+      bucket: `auth:${action}:ip:${ip}:h:${hour}`,
+      limit: limitFromEnv("RATE_LIMIT_AUTH_HOUR", 20),
+      resetAt: hourEnd,
+      message: "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+    },
+  ];
+
+  // 로그인은 노려지는 계정 자체도 센다.
+  if (action === "login" && email) {
+    const target = hashIp(email.trim().toLowerCase());
+    rules.push({
+      bucket: `auth:login:acct:${target}:h:${hour}`,
+      limit: limitFromEnv("RATE_LIMIT_LOGIN_ACCOUNT_HOUR", 20),
+      resetAt: hourEnd,
+      message: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+    });
+  }
+
+  return applyRules(rules, now);
+}
+
 export async function enforceAnalyzeRateLimit(
   req: NextRequest,
   session: SessionUser | null
@@ -151,6 +203,11 @@ export async function enforceAnalyzeRateLimit(
     message: "오늘 서비스 전체 분석 한도에 도달했습니다. 내일 다시 시도해 주세요.",
   });
 
+  return applyRules(rules, now);
+}
+
+/** 규칙을 좁은 것부터 적용한다. 앞에서 걸리면 뒤 카운터는 세지 않는다. */
+async function applyRules(rules: Rule[], now: Date): Promise<RateLimitVerdict> {
   for (const rule of rules) {
     let used: number;
     try {

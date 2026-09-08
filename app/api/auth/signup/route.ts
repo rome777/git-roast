@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createUserInDb } from "@/lib/db/database";
 import { hashPassword, validatePassword } from "@/lib/auth/password";
 import { attachSession } from "@/lib/auth/session";
+import { enforceAuthRateLimit } from "@/lib/ratelimit";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -16,6 +17,11 @@ export async function POST(req: NextRequest) {
     if (pwError) return NextResponse.json({ error: pwError }, { status: 400 });
 
     const trimmedEmail = email.trim().toLowerCase();
+
+    // 제한이 없으면 계정을 무제한으로 만들 수 있다.
+    const verdict = await enforceAuthRateLimit(req, "signup");
+    if (!verdict.ok) return verdict.response;
+
     const created = await createUserInDb(trimmedEmail, await hashPassword(password));
 
     if (!created) {

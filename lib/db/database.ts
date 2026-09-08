@@ -432,7 +432,12 @@ export async function getUserByEmailFromDb(email: string) {
       await initPgSchema(pool);
 
       const res = await pool.query(`SELECT * FROM users WHERE LOWER(email) = LOWER($1);`, [email]);
-      if (res.rows.length > 0) return res.rows[0];
+
+      // 못 찾았어도 "없음"을 그대로 돌려준다. 여기서 SQLite 로 흘러가면
+      // PostgreSQL 에 없는 계정을 로컬 스냅샷에서 찾아내게 된다 — 즉
+      // **운영 DB 에서 지운 계정이 낡은 해시로 다시 로그인된다.**
+      // requireAdmin 도 이 함수로 role 을 읽으므로 권한까지 되살아난다.
+      return res.rows[0] ?? null;
     } catch (err) {
       handlePgError("getUserByEmail", err);
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserByEmailFromDb } from "@/lib/db/database";
 import { verifyPassword, isLegacyPlaceholder, validatePassword } from "@/lib/auth/password";
 import { attachSession } from "@/lib/auth/session";
+import { enforceAuthRateLimit } from "@/lib/ratelimit";
 
 // 이메일/비밀번호 중 무엇이 틀렸는지 알려주지 않는다(계정 존재 여부 노출 방지).
 const INVALID = "이메일 또는 비밀번호가 일치하지 않습니다.";
@@ -17,6 +18,11 @@ export async function POST(req: NextRequest) {
     if (pwError) return NextResponse.json({ error: pwError }, { status: 400 });
 
     const trimmedEmail = email.trim().toLowerCase();
+
+    // 비밀번호 검증 앞에 둔다. 없으면 비밀번호를 무한히 추측할 수 있다.
+    const verdict = await enforceAuthRateLimit(req, "login", trimmedEmail);
+    if (!verdict.ok) return verdict.response;
+
     const user = await getUserByEmailFromDb(trimmedEmail);
 
     if (!user) {

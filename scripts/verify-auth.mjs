@@ -12,13 +12,33 @@
 const BASE = "http://localhost:3000";
 let pass = 0, fail = 0;
 
+// 실행마다 다른 클라이언트 IP 인 척한다.
+// 인증 엔드포인트에 요청량 제한이 걸려 있어, 같은 IP 로 반복 실행하면
+// 2회차부터 429 가 나서 검사가 무의미해진다.
+// (Vercel 은 x-forwarded-for 를 실제 클라이언트로 덮어쓰므로 운영에서는 위조 불가)
+const RUN_IP = `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
+
 function check(name, cond, detail = "") {
   if (cond) { pass++; console.log(`  PASS  ${name}`); }
   else { fail++; console.log(`  FAIL  ${name}  ${detail}`); }
 }
 
-async function req(path, { method = "GET", body, cookie } = {}) {
-  const headers = {};
+/**
+ * 429 는 어떤 검사에서도 "기대한 실패" 로 취급하면 안 된다.
+ * 요청량 제한에 걸려 401 대신 429 가 났을 뿐인데 통과로 세면,
+ * 검사가 통째로 거짓 통과한다 (실제로 겪었다 — 2026-09-08).
+ */
+function checkStatus(name, res, expected) {
+  if (res.status === 429 && expected !== 429) {
+    fail++;
+    console.log(`  FAIL  ${name}  요청량 제한(429)에 걸려 검사 불가 — 잠시 후 다시 실행하세요`);
+    return;
+  }
+  check(name, res.status === expected, `status=${res.status}`);
+}
+
+async function req(path, { method = "GET", body, cookie, ip } = {}) {
+  const headers = { "x-forwarded-for": ip || RUN_IP };
   if (body) headers["Content-Type"] = "application/json";
   if (cookie) headers["Cookie"] = cookie;
   const res = await fetch(BASE + path, {
@@ -68,13 +88,25 @@ check("맞는 비밀번호 -> 200", rightPw.status === 200, `status=${rightPw.st
   const guesses = ["whatever12345", "admin1234", "password123", "adminadmin"];
   let allBlocked = true;
   const leaks = [];
+  let throttled = false;
+  let n = 0;
   for (const email of unsetAccounts) {
     for (const password of guesses) {
-      const r = await req("/api/auth/login", { method: "POST", body: { email, password } });
+      // 시도마다 다른 IP 로 보낸다. 이 검사의 목적은 "어떤 비밀번호도 통하지 않는다" 이지
+      // 요청량 제한이 아니다. 같은 IP 로 몰면 429 에 걸려 검사가 무의미해진다.
+      const r = await req("/api/auth/login", {
+        method: "POST", body: { email, password }, ip: "203.0.113." + (++n),
+      });
       if (r.status === 200) { allBlocked = false; leaks.push(email + ' / ' + password); }
+      if (r.status === 429) throttled = true;
     }
   }
-  check("비밀번호 미설정 계정은 어떤 값으로도 로그인 불가", allBlocked, leaks.join(", "));
+  if (throttled) {
+    fail++;
+    console.log("  FAIL  비밀번호 미설정 계정은 어떤 값으로도 로그인 불가  요청량 제한(429)에 걸려 검사 불가");
+  } else {
+    check("비밀번호 미설정 계정은 어떤 값으로도 로그인 불가", allBlocked, leaks.join(", "));
+  }
 }
 
 console.log("\n[4] 관리자 권한");
@@ -118,6 +150,36 @@ console.log("\n[7] 로그아웃");
 const logout = await req("/api/auth/logout", { method: "POST", cookie: userCookie });
 check("로그아웃 -> 200", logout.status === 200);
 check("로그아웃 응답이 세션 쿠키 만료", logout.setCookies.some((c) => c.startsWith("gitroast_session=;") || /gitroast_session=;/.test(c)), logout.setCookies.join(" | "));
+
+console.log("\n[8] 요청량 제한");
+{
+  // 제한이 없으면 비밀번호를 무한히 추측할 수 있다.
+  // 실제로 운영에서 10회 연속 시도가 전부 통과하는 것을 확인했었다 (2026-09-08).
+  const attackIp = "192.0.2." + (Math.floor(Math.random() * 250) + 1);
+  let blockedAt = 0;
+  for (let i = 1; i <= 10; i++) {
+    const r = await req("/api/auth/login", {
+      method: "POST",
+      body: { email: "rome777@gmail.com", password: "definitelywrong" + i },
+      ip: attackIp,
+    });
+    if (r.status === 429) { blockedAt = i; break; }
+  }
+  check("로그인 무차별 대입이 차단된다 (429)", blockedAt > 0,
+    blockedAt === 0 ? "10회 연속 시도가 전부 통과했다" : "");
+
+  const analyzeIp = "192.0.2." + (Math.floor(Math.random() * 250) + 1);
+  let analyzeBlocked = false;
+  for (let i = 1; i <= 6; i++) {
+    const r = await req("/api/analyze", {
+      method: "POST",
+      body: { username: "zzz-no-such-user-verify", mode: "roast" },
+      ip: analyzeIp,
+    });
+    if (r.status === 429) { analyzeBlocked = true; break; }
+  }
+  check("비로그인 분석 요청량이 제한된다 (429)", analyzeBlocked);
+}
 
 console.log(`\n결과: ${pass} PASS / ${fail} FAIL\n`);
 process.exit(fail === 0 ? 0 : 1);
