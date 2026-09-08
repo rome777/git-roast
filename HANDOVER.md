@@ -2,7 +2,7 @@
 
 > **최종 갱신 시각**: 2026-09-08 17:20:00 (KST)  
 > **프로젝트 위치**: `c:\aiffel_work\git-roast` (NTFS Junction: `c:\aiffel_work\business`)  
-> **현재 서버 상태**: `http://localhost:3000` (Next.js 14 프로덕션 빌드 가동 중)  
+> **현재 서버 상태**: 운영은 Vercel 에서 상시 가동. 로컬 서버는 떠 있지 않다 — 필요하면 `npm run build && npm start` (프로덕션 빌드를 http 로 볼 때는 `COOKIE_SECURE=false`)  
 > **현재 DB**: **PostgreSQL 17** (로컬 5432, `gitroast` DB) — 관리자 콘솔에 `🐘 PostgreSQL 활성화` 표시  
 > **원격 저장소**: [`github.com/rome777/git-roast`](https://github.com/rome777/git-roast) (main)  
 > **운영 URL**: **https://git-roast-three.vercel.app** (Vercel `somsaps-projects/git-roast`)  
