@@ -1,0 +1,126 @@
+import { NextRequest, NextResponse } from "next/server";
+import { parseGitHubTarget } from "@/lib/github/parser";
+import { fetchGitHubData, fetchGitHubRepoData } from "@/lib/github/api";
+import { evaluateGitHub, evaluateGitHubRepo } from "@/lib/ai/evaluator";
+import { EvaluationMode, EvaluationResult } from "@/lib/ai/types";
+import { createClient } from "@/lib/supabase/server";
+import { saveEvaluationToDb } from "@/lib/db/database";
+import { getSession } from "@/lib/auth/session";
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { username, mode = "roast" } = body;
+
+    if (!username || typeof username !== "string" || !username.trim()) {
+      return NextResponse.json(
+        { error: "GitHub 사용자명 또는 리포지토리 URL을 입력해 주세요." },
+        { status: 400 }
+      );
+    }
+
+    const evaluationMode: EvaluationMode = mode === "review" ? "review" : "roast";
+
+    // 1. Smart Target Parsing (User vs Repository with optional file path)
+    const parsed = parseGitHubTarget(username);
+
+    let evaluation: EvaluationResult;
+    let rawSummary: any = {};
+    let targetName = parsed.fullName;
+
+    if (parsed.type === "repo" && parsed.repo) {
+      // 2-A. Fetch single repository data
+      const repoData = await fetchGitHubRepoData(parsed.owner, parsed.repo, parsed.subPath);
+      evaluation = await evaluateGitHubRepo(repoData, evaluationMode);
+      rawSummary = {
+        stars: repoData.stargazers_count,
+        forks: repoData.forks_count,
+        language: repoData.language,
+        languages: repoData.languages,
+        targetFile: repoData.targetFile?.name,
+      };
+    } else {
+      // 2-B. Fetch user profile and repos data
+      const githubData = await fetchGitHubData(parsed.owner);
+      evaluation = await evaluateGitHub(githubData, evaluationMode);
+      targetName = githubData.user.login;
+      rawSummary = {
+        totalStars: githubData.totalStars,
+        totalForks: githubData.totalForks,
+        publicRepos: githubData.user.public_repos,
+        languages: githubData.languages,
+      };
+    }
+
+    // 3. 요청자 세션 (서명 검증된 쿠키만 신뢰. 없으면 게스트로 기록)
+    const session = getSession(req);
+    const userEmail = session?.email ?? "guest@gitroast.dev";
+    const userId = session?.id ?? "guest";
+
+    // 4. Save to Persistent SQLite Database (data/gitroast.db)
+    const dbSavedId = await saveEvaluationToDb(userId, userEmail, evaluation);
+    let savedId = dbSavedId;
+
+    // 5. Optional Supabase cloud synchronization if configured
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          const { data: inserted, error: dbError } = await supabase
+            .from("evaluations")
+            .insert({
+              user_id: user.id,
+              target_type: parsed.type,
+              target_name: targetName,
+              mode: evaluationMode,
+              tier: evaluation.tier,
+              score: evaluation.score,
+              title: evaluation.title,
+              one_liner: evaluation.oneLiner,
+              summary: evaluation.summary,
+              details: {
+                radarScores: evaluation.radarScores,
+                radarLabels: evaluation.radarLabels,
+                highlights: evaluation.highlights,
+                recommendations: evaluation.recommendations,
+                riskFactor: evaluation.riskFactor,
+                repoMeta: evaluation.repoMeta,
+              },
+              raw_github_summary: rawSummary,
+              is_public: true,
+            })
+            .select("id")
+            .single();
+
+          if (inserted?.id) {
+            savedId = inserted.id;
+          }
+          if (dbError) {
+            console.warn("Could not save to Supabase:", dbError.message);
+          }
+        }
+      } catch (authErr) {
+        console.warn("Auth check failed during save:", authErr);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...evaluation,
+        id: savedId,
+      },
+      savedBy: userEmail,
+    });
+  } catch (error: any) {
+    console.error("API /api/analyze error:", error);
+    return NextResponse.json(
+      { error: error.message || "분석 중 알 수 없는 오류가 발생했습니다." },
+      { status: error.message?.includes("찾을 수 없습니다") ? 404 : 500 }
+    );
+  }
+}

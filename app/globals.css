@@ -1,0 +1,167 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+
+  --card: 222.2 84% 7%;
+  --card-foreground: 210 40% 98%;
+
+  --primary: 263.4 70% 50.4%;
+  --primary-foreground: 210 40% 98%;
+
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+
+  --accent: 142.1 76.2% 36.3%;
+  --accent-foreground: 355.7 100% 97.3%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 263.4 70% 50.4%;
+
+  --radius: 0.75rem;
+}
+
+body {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom glowing effects */
+.glow-purple {
+  box-shadow: 0 0 25px -5px rgba(168, 85, 247, 0.4);
+}
+
+.glow-orange {
+  box-shadow: 0 0 25px -5px rgba(249, 115, 22, 0.4);
+}
+
+.glow-green {
+  box-shadow: 0 0 25px -5px rgba(34, 197, 94, 0.4);
+}
+
+.gradient-text-roast {
+  background: linear-gradient(135deg, #f97316 0%, #ef4444 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-text-review {
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 한국어 줄바꿈 —
+   기본 word-break 는 어절 중간("인가요" -> "인가" / "요")에서 끊는다.
+   keep-all 로 어절을 보존하고, 대신 URL·리포지토리명 같은 긴 영문 토큰은
+   overflow-wrap 으로 넘긴다. */
+body {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* /docs 의 마크다운 본문 — 저장소 원문을 읽기 좋게 렌더링한다. */
+.markdown-body {
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  line-height: 1.75;
+}
+@media (min-width: 1200px) {
+  .markdown-body { font-size: 0.95rem; }
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  color: #fff;
+  font-weight: 800;
+  line-height: 1.3;
+  scroll-margin-top: 5rem;
+}
+.markdown-body h1 { font-size: 1.6rem; margin: 2rem 0 1rem; }
+.markdown-body h2 {
+  font-size: 1.3rem;
+  margin: 2.25rem 0 0.9rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #1e293b;
+}
+.markdown-body h3 { font-size: 1.08rem; margin: 1.75rem 0 0.6rem; }
+.markdown-body h4 { font-size: 0.95rem; margin: 1.4rem 0 0.5rem; color: #e2e8f0; }
+.markdown-body p { margin: 0.85rem 0; }
+.markdown-body strong { color: #fff; font-weight: 700; }
+.markdown-body em { color: #94a3b8; }
+.markdown-body a { color: #38bdf8; text-decoration: underline; text-underline-offset: 2px; }
+.markdown-body a:hover { color: #7dd3fc; }
+.markdown-body ul,
+.markdown-body ol { margin: 0.85rem 0; padding-left: 1.35rem; }
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+.markdown-body li { margin: 0.3rem 0; }
+.markdown-body li::marker { color: #64748b; }
+.markdown-body code {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.375rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+  color: #fbbf24;
+  word-break: break-all;
+}
+.markdown-body pre {
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 0.9rem;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  margin: 1.1rem 0;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.markdown-body pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #cbd5e1;
+  word-break: normal;
+}
+.markdown-body blockquote {
+  border-left: 3px solid #f97316;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0 0.6rem 0.6rem 0;
+  padding: 0.7rem 1rem;
+  margin: 1.1rem 0;
+  color: #94a3b8;
+}
+.markdown-body blockquote p { margin: 0.3rem 0; }
+.markdown-body hr { border: 0; border-top: 1px solid #1e293b; margin: 2rem 0; }
+/* 표는 좁은 화면에서 페이지가 아니라 표 자체가 가로 스크롤되게 한다 */
+.markdown-body table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 1.1rem 0;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #1e293b;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.markdown-body th { background: #0f172a; color: #e2e8f0; font-weight: 700; }
+.markdown-body tr:nth-child(even) td { background: rgba(15, 23, 42, 0.4); }
+.markdown-body input[type="checkbox"] { margin-right: 0.4rem; accent-color: #f97316; }
