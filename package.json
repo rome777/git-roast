@@ -9,7 +9,9 @@
     "lint": "next lint",
     "verify:auth": "node scripts/verify-auth.mjs",
     "set-password": "node scripts/set-password.mjs",
-    "db:migrate": "node scripts/migrate-sqlite-to-postgres.mjs"
+    "db:migrate": "node scripts/migrate-sqlite-to-postgres.mjs",
+    "db:copy": "node scripts/migrate-postgres-to-postgres.mjs",
+    "preflight": "node scripts/preflight.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",

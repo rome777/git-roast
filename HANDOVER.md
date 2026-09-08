@@ -579,15 +579,100 @@ c:\aiffel_work\git-roast\
 - 기능에는 영향이 없지만 관리자 콘솔 사용자 목록을 어지럽힌다. 배포 전 정리 권장.
   (파괴적 작업이라 이번 세션에서는 손대지 않았다.)
 
+**⑩ 배포 런북 (2026-09-08 작성)**
+
+브라우저 로그인 두 번만 사람이 하고, 나머지는 명령으로 끝난다.
+`vercel` CLI 는 전역 설치돼 있다 (v59.11.7).
+
+```bash
+# 언제든 현재 상태 점검 (아무것도 고치지 않는다. 읽고 판정만 한다)
+npm run preflight                 # 원격 배포 기준
+npm run preflight -- --local      # 로컬 개발 기준
+```
+
+**1단계 — Neon 프로젝트 (브라우저)**
+[neon.com](https://neon.com) 가입 → 프로젝트 생성 → **Pooled connection** 문자열 복사.
+호스트에 `-pooler` 가 붙은 쪽이어야 한다. 서버리스는 인스턴스마다 풀을 새로 만들기 때문에
+직결 문자열을 쓰면 커넥션이 고갈된다.
+
+**2단계 — 데이터 이관 (명령)**
+
+```bash
+npm run db:copy -- --to "<Neon pooled 문자열>"
+npm run preflight -- --database-url "<Neon pooled 문자열>"
+```
+
+원본(로컬 PostgreSQL)은 읽기만 한다. 같은 id 는 건너뛰므로 여러 번 돌려도 안전하다.
+접속 문자열을 셸 히스토리에 남기고 싶지 않으면 `TARGET_DATABASE_URL` 환경 변수를 써도 된다.
+
+**3단계 — Vercel 로그인 (브라우저)**
+
+```bash
+vercel login
+```
+
+**4단계 — 프로젝트 연결과 환경 변수 (명령)**
+
+```bash
+vercel link
+```
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))" | vercel env add SESSION_SECRET production
+```
+
+`SESSION_SECRET` 은 새로 만들어 화면에 띄우지 않고 바로 넣는다.
+로컬 값을 재사용하지 않는다 — 한쪽이 유출되면 양쪽이 함께 뚫린다.
+
+```bash
+vercel env add DATABASE_URL production
+vercel env add GEMINI_API_KEY production
+vercel env add NEXT_PUBLIC_SITE_URL production
+echo "true" | vercel env add DISABLE_DEMO_LOGIN production
+```
+
+> ⚠️ `NEXT_PUBLIC_SITE_URL` 은 **첫 빌드 전에** 넣어야 한다.
+> `NEXT_PUBLIC_` 접두사 변수는 빌드 시점에 값이 코드에 박히므로, 나중에 넣으면
+> 재배포 전까지 반영되지 않는다. 값은 `https://<프로젝트>.vercel.app`.
+
+**5단계 — 배포 (명령)**
+
+```bash
+vercel deploy --prod
+```
+
+**6단계 — 배포 후 (명령)**
+
+새 DB 는 시드 계정이 로그인 불가 상태(`mock_pw_hash`)로 들어간다. 비밀번호를 부여한다.
+
+```bash
+DATABASE_URL="<Neon pooled 문자열>" npm run set-password -- <이메일> "<충분히 긴 임의 문자열>"
+```
+
+배포 URL 에서 확인할 것:
+- `/result/<카드id>` 의 공유 미리보기가 카드별로 다르게 뜨는지
+- 분석을 한도 이상 호출했을 때 429 와 `Retry-After` 가 나오는지
+- 관리자 콘솔 배지가 `🐘 PostgreSQL 활성화` 인지 (SQLite 로 떨어지면 데이터가 재배포 때 사라진다)
+
 **남은 배포 전 조치 (사용자만 할 수 있는 것)**
 
-0. **`admin@gitroast.dev` 비밀번호 재설정** — ⑧ 참조. **가장 시급하다.**
-1. **API 키 재발급** — 과거 이 문서에 평문 노출됐던 Gemini/Vertex 키가 아직 그대로다.
-2. **Neon 프로젝트 생성** → pooler 연결 문자열 확보 → `npm run db:migrate` 로 이관.
-3. **Vercel 연결** 및 환경 변수 입력 (`DATABASE_URL`, `SESSION_SECRET`(신규 생성),
-   `GEMINI_API_KEY`(재발급분), `NEXT_PUBLIC_SITE_URL`, `DISABLE_DEMO_LOGIN=true`).
-   `NEXT_PUBLIC_SITE_URL` 은 **첫 빌드 전에** 넣어야 한다.
-4. **배포 후** 원격 DB 대상으로 `npm run set-password` 실행 — 새 DB 는 시드가
-   `mock_pw_hash` 라 관리자 계정이 로그인 불가 상태로 시작한다.
-5. **`/docs` 공개 범위 판단** — `TECH_SPEC.md`·`FINAL_CHECKLIST.md` 가 공개 대상이다
-   (`lib/docs.ts` 화이트리스트). 내부 아키텍처와 보안 점검 내역이 그대로 노출된다.
+절차 자체는 ⑩ 런북에 있다. 여기서는 **판단이나 계정이 필요한 것**만 적는다.
+
+| # | 항목 | 상태 |
+| :-- | :--- | :--- |
+| 1 | `rome777@gmail.com`·`admin@gitroast.dev` 비밀번호 재설정 (⑧) | **사용자가 보류하기로 함 (2026-09-08)**. 공개 배포 전에는 반드시 처리해야 한다 — 값이 이미 git 히스토리에 공개돼 있다. |
+| 2 | Gemini/Vertex API 키 재발급 | **사용자가 보류하기로 함 (2026-09-08)** |
+| 3 | Neon 가입·프로젝트 생성 | 브라우저 로그인 필요 — 그 뒤 `npm run db:copy` 로 이관까지 자동 |
+| 4 | `vercel login` | 브라우저 로그인 필요 — 그 뒤 ⑩ 4~5단계는 명령으로 끝 |
+| 5 | `/docs` 공개 범위 판단 | `TECH_SPEC.md`·`FINAL_CHECKLIST.md` 가 공개 대상(`lib/docs.ts` 화이트리스트). 내부 아키텍처와 보안 점검 내역이 그대로 노출된다. 포트폴리오라면 오히려 공개가 나을 수도 있어 판단을 남겨 뒀다. |
+| 6 | `tester-*` 계정 5건 정리 | 파괴적 작업이라 손대지 않았다 |
+
+**이번 세션에서 새로 만든 도구**
+
+| 명령 | 하는 일 |
+| :--- | :--- |
+| `npm run preflight` | 배포 준비 상태 점검. 커밋 누락·추적되지 않은 소스 파일·평문 비밀값·localhost DB·빌드타임 변수 누락·계정 상태를 한 번에 본다. 고치지 않고 판정만 한다. |
+| `npm run db:copy -- --to "<url>"` | PostgreSQL → PostgreSQL 이관. 기존 `db:migrate` 는 SQLite → PostgreSQL 전용이라 **로컬 PostgreSQL 을 클라우드로 올릴 경로가 없었다.** 원본은 읽기만 하고, 멱등하며, 건수를 대조한다. |
+
+> `npm run preflight` 는 오늘 실제로 겪은 사고(`git commit -a` 가 새 파일을 담지 않아
+> HEAD 가 빌드되지 않은 것)를 잡도록 **추적되지 않은 소스 파일** 검사를 넣어 뒀다.
