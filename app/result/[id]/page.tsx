@@ -1,109 +1,66 @@
-"use client";
+import { cache } from "react";
+import type { Metadata } from "next";
+import { getEvaluationByIdFromDb } from "@/lib/db/database";
+import { ResultView } from "./ResultView";
 
-import React, { useEffect, useState } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { EvaluationResult } from "@/lib/ai/types";
-import { EvaluationCard } from "@/components/evaluation/EvaluationCard";
-import { ArrowLeft, Sparkles } from "lucide-react";
+/**
+ * 공유 링크는 서버에서 렌더한다.
+ *
+ * 예전에는 이 페이지가 통째로 클라이언트 컴포넌트라, 카카오톡·트위터·디스코드가
+ * 링크를 펼칠 때 사이트 공통 메타태그만 읽어 갔다 — 어떤 카드를 공유하든 미리보기가
+ * 전부 똑같이 떴다는 뜻이다. 공유가 핵심인 서비스에서 이건 기능이 죽은 것과 같다.
+ */
 
-export default function ResultPage() {
-  const params = useParams();
-  const id = params?.id as string;
-
-  const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-
-    const load = async () => {
-      // 1. DB 를 먼저 조회한다. 공유 링크는 비로그인 사용자도 열 수 있어야 하므로
-      //    이 경로가 정답이고, localStorage 는 오프라인 보조 수단일 뿐이다.
-      try {
-        const res = await fetch(`/api/evaluations/${encodeURIComponent(id)}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (!cancelled && json?.evaluation) {
-            setEvaluation(json.evaluation);
-            setLoading(false);
-            return;
-          }
-        }
-      } catch {
-        // 네트워크 실패 시 아래 localStorage 로 넘어간다.
-      }
-
-      // 2. 내 브라우저에 남아 있는 기록 (DB 조회 실패 시 보조)
-      try {
-        const history: EvaluationResult[] = JSON.parse(
-          localStorage.getItem("gitroast_history") || "[]"
-        );
-        const found = history.find((h) => h.id === id);
-        if (!cancelled && found) {
-          setEvaluation(found);
-          setLoading(false);
-          return;
-        }
-      } catch {}
-
-      // 3. 없으면 없다고 말한다. 목업으로 대체하지 않는다.
-      if (!cancelled) {
-        setEvaluation(null);
-        setLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center py-20 text-slate-400">
-        <span className="animate-pulse">평가 카드 불러오는 중...</span>
-      </div>
-    );
+/** generateMetadata 와 페이지가 각각 부르므로 요청 단위로 결과를 재사용한다. */
+const getEvaluation = cache(async (id: string) => {
+  try {
+    return await getEvaluationByIdFromDb(id);
+  } catch (err) {
+    // 메타태그 때문에 페이지 전체를 죽이지는 않는다. 화면은 보조 경로로 넘어간다.
+    console.error("[result] 평가 조회 실패:", err);
+    return null;
   }
+});
+
+const MODE_LABEL = { roast: "🔥 매운맛", review: "💼 순한맛" } as const;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  const evaluation = await getEvaluation(params.id);
 
   if (!evaluation) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center py-20 text-center px-4 min-h-[60vh]">
-        <h2 className="text-xl font-bold text-white mb-2">분석 카드를 찾을 수 없습니다</h2>
-        <p className="text-xs text-slate-400 mb-6">존재하지 않거나 삭제된 평가 카드입니다.</p>
-        <Link
-          href="/"
-          className="px-4 py-2 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-500"
-        >
-          새 분석하러 가기
-        </Link>
-      </div>
-    );
+    return {
+      title: "찾을 수 없는 카드 - GitRoast",
+      description: "존재하지 않거나 삭제된 평가 카드입니다.",
+    };
   }
 
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-10 xl:py-16 max-w-4xl xl:max-w-5xl mx-auto w-full">
-      {/* Top Bar Navigation */}
-      <div className="w-full flex items-center justify-between mb-8 xl:mb-10 max-w-2xl xl:max-w-4xl">
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 text-xs xl:text-sm font-bold text-slate-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" /> 메인으로 돌아가기
-        </Link>
-        <Link
-          href="/"
-          className="flex items-center gap-1 px-3 py-1.5 xl:px-4 xl:py-2 rounded-lg text-xs xl:text-sm font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-all"
-        >
-          <Sparkles className="w-3.5 h-3.5" /> 나도 분석받기
-        </Link>
-      </div>
+  const mode = MODE_LABEL[evaluation.mode] ?? "";
+  const title = `${evaluation.targetUsername} — ${evaluation.tier} 티어 (${evaluation.score}점) | GitRoast`;
+  const description = `${mode} ${evaluation.oneLiner}`.trim();
 
-      {/* Main Card View */}
-      <EvaluationCard data={evaluation} />
-    </div>
-  );
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      siteName: "GitRoast",
+      url: `/result/${encodeURIComponent(params.id)}`,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
+
+export default async function ResultPage({ params }: { params: { id: string } }) {
+  const evaluation = await getEvaluation(params.id);
+  return <ResultView id={params.id} initialEvaluation={evaluation} />;
 }

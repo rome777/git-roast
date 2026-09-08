@@ -1,5 +1,3 @@
-// @ts-ignore
-import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
@@ -92,6 +90,13 @@ async function initPgSchema(pool: Pool) {
       evaluation_id VARCHAR(100) NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    -- 요청량 제한 카운터 (고정 윈도). bucket 에 대상과 윈도가 함께 인코딩된다.
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      bucket VARCHAR(200) PRIMARY KEY,
+      hits INTEGER NOT NULL DEFAULT 0,
+      expires_at TIMESTAMPTZ NOT NULL
+    );
   `);
 
   // Seed default admin users if table is empty
@@ -116,6 +121,12 @@ async function initPgSchema(pool: Pool) {
 // 2. SQLite Fallback Engine
 function getSqliteDb(): any {
   if (!sqliteDbInstance) {
+    // node:sqlite 는 Node 22.5+ 에만 있다. top-level import 로 두면 PostgreSQL 만
+    // 쓰는 배포 환경에서도 런타임이 그보다 낮을 때 모듈 로드 단계에서 앱 전체가
+    // 죽는다. 실제로 SQLite 경로를 탈 때만 불러온다.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { DatabaseSync } = require("node:sqlite");
+
     const dataDir = path.join(process.cwd(), "data");
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
@@ -160,6 +171,12 @@ function initSqliteSchema(db: any) {
       user_id TEXT NOT NULL,
       evaluation_id TEXT NOT NULL,
       created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      bucket TEXT PRIMARY KEY,
+      hits INTEGER NOT NULL DEFAULT 0,
+      expires_at TEXT NOT NULL
     );
   `);
 
@@ -613,4 +630,57 @@ export async function getEvaluationByIdFromDb(id: string): Promise<EvaluationRes
   const db = getSqliteDb();
   const row = db.prepare(`SELECT * FROM evaluations WHERE id = ? LIMIT 1;`).get(id) as any;
   return row ? mapSqliteRowToEvaluation(row) : null;
+}
+
+/**
+ * 요청량 제한 카운터를 1 올리고 "올린 뒤의 값"을 돌려준다.
+ *
+ * 원자적 UPSERT 라 같은 버킷에 동시 요청이 몰려도 카운트가 새지 않는다.
+ *
+ * 다른 함수와 달리 handlePgError 를 쓰지 않는다 — 여기서 SQLite 로 조용히
+ * 폴백하면 서버리스 인스턴스마다 카운터가 따로 생겨 제한이 사실상 사라진다.
+ * 셀 수 없으면 에러를 그대로 올려서 호출부가 요청을 거부하게 한다.
+ */
+export async function bumpRateLimitCounter(bucket: string, expiresAt: Date): Promise<number> {
+  // 만료된 버킷 청소. 매 요청마다 DELETE 를 날리면 청소가 카운팅보다 비싸지므로
+  // 가끔만 한다.
+  const shouldSweep = Math.random() < 0.02;
+  const nowIso = new Date().toISOString();
+
+  if (isPostgresConfigured()) {
+    const pool = getPgPool();
+    await initPgSchema(pool);
+
+    const res = await pool.query(
+      `INSERT INTO rate_limits (bucket, hits, expires_at) VALUES ($1, 1, $2)
+       ON CONFLICT (bucket) DO UPDATE SET hits = rate_limits.hits + 1
+       RETURNING hits;`,
+      [bucket, expiresAt.toISOString()]
+    );
+
+    if (shouldSweep) {
+      try {
+        await pool.query(`DELETE FROM rate_limits WHERE expires_at < NOW();`);
+      } catch (err) {
+        console.warn("[db] rate_limits 청소 실패(무시):", err);
+      }
+    }
+
+    return Number(res.rows[0].hits);
+  }
+
+  const db = getSqliteDb();
+  const row = db
+    .prepare(
+      `INSERT INTO rate_limits (bucket, hits, expires_at) VALUES (?, 1, ?)
+       ON CONFLICT(bucket) DO UPDATE SET hits = hits + 1
+       RETURNING hits;`
+    )
+    .get(bucket, expiresAt.toISOString()) as { hits: number };
+
+  if (shouldSweep) {
+    db.prepare(`DELETE FROM rate_limits WHERE expires_at < ?;`).run(nowIso);
+  }
+
+  return Number(row.hits);
 }

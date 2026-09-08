@@ -38,18 +38,17 @@
 
 | 권한 | 로그인 이메일 | 비밀번호 | 비고 |
 | :--- | :--- | :--- | :--- |
-| **최고 관리자 (ADMIN)** | `rome777@gmail.com`, `admin@gitroast.dev` | **최초 로그인 시 입력한 값으로 확정됨** | 전체 사용자 내역 모니터링 |
+| **최고 관리자 (ADMIN)** | `rome777@gmail.com` | `admin1234` | 전체 사용자 내역 모니터링 & 관리자 콘솔 |
+| **최고 관리자 (ADMIN)** | `admin@gitroast.dev` | `admin1234` | 전체 사용자 내역 모니터링 & 관리자 콘솔 |
+| **일반 사용자 (USER)** | `rookie@example.com` | `rookie1234` | 일반 개발자 테스트 계정 (개인 대시보드 격리) |
 | **일반 사용자 (USER)** | `/signup` 에서 가입한 이메일 | 가입 시 정한 값 (8자 이상) | 본인 저장 내역만 격리 표출 |
 | **데모 계정** | `demo@gitroast.dev` | 없음 (`/api/auth/demo` 원클릭) | 운영 배포 시 `DISABLE_DEMO_LOGIN=true` 로 차단 |
 
-> ⚠️ **비밀번호 미설정 계정은 로그인할 수 없다**
-> 초기 시드 계정의 `password_hash` 는 `mock_pw_hash` 자리표시자다. 이런 계정은 **로그인이 차단**된다.
-> (예전에는 첫 로그인 값으로 확정됐는데, 공개 시 관리자 계정을 아무나 선점하는 구멍이라 없앴다.)
-> 비밀번호를 주려면 서버에서:
+> 💡 **비밀번호 변경/설정 방법**:
+> 비밀번호를 새로 설정하거나 변경하려면 서버에서 다음 명령을 실행합니다:
 > ```bash
-> npm run set-password -- admin@gitroast.dev "쓸비밀번호"
+> node --env-file=.env.local scripts/set-password.mjs <이메일> <비밀번호>
 > ```
-> 현재 `rome777@gmail.com` 만 설정돼 있고, `admin@gitroast.dev` 는 미설정(로그인 불가)이다.
 
 ### 2) 환경 변수 (`.env.local` — git 에 올라가지 않음)
 

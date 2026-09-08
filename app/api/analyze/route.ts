@@ -6,6 +6,7 @@ import { EvaluationMode, EvaluationResult } from "@/lib/ai/types";
 import { createClient } from "@/lib/supabase/server";
 import { saveEvaluationToDb } from "@/lib/db/database";
 import { getSession } from "@/lib/auth/session";
+import { enforceAnalyzeRateLimit } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,9 +20,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 1. 요청자 세션 (서명 검증된 쿠키만 신뢰. 없으면 게스트로 기록)
+    const session = getSession(req);
+
+    // 2. 요청량 제한. GitHub 호출과 Gemini 추론 "앞"에 있어야 의미가 있다 —
+    //    한 건마다 추론 비용이 발생하므로, 일을 끝낸 뒤 거절하면 이미 늦었다.
+    const verdict = await enforceAnalyzeRateLimit(req, session);
+    if (!verdict.ok) return verdict.response;
+
     const evaluationMode: EvaluationMode = mode === "review" ? "review" : "roast";
 
-    // 1. Smart Target Parsing (User vs Repository with optional file path)
+    // 3. Smart Target Parsing (User vs Repository with optional file path)
     const parsed = parseGitHubTarget(username);
 
     let evaluation: EvaluationResult;
@@ -29,7 +38,7 @@ export async function POST(req: NextRequest) {
     let targetName = parsed.fullName;
 
     if (parsed.type === "repo" && parsed.repo) {
-      // 2-A. Fetch single repository data
+      // 3-A. Fetch single repository data
       const repoData = await fetchGitHubRepoData(parsed.owner, parsed.repo, parsed.subPath);
       evaluation = await evaluateGitHubRepo(repoData, evaluationMode);
       rawSummary = {
@@ -40,7 +49,7 @@ export async function POST(req: NextRequest) {
         targetFile: repoData.targetFile?.name,
       };
     } else {
-      // 2-B. Fetch user profile and repos data
+      // 3-B. Fetch user profile and repos data
       const githubData = await fetchGitHubData(parsed.owner);
       evaluation = await evaluateGitHub(githubData, evaluationMode);
       targetName = githubData.user.login;
@@ -52,12 +61,10 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // 3. 요청자 세션 (서명 검증된 쿠키만 신뢰. 없으면 게스트로 기록)
-    const session = getSession(req);
     const userEmail = session?.email ?? "guest@gitroast.dev";
     const userId = session?.id ?? "guest";
 
-    // 4. Save to Persistent SQLite Database (data/gitroast.db)
+    // 4. Save to Persistent Database (PostgreSQL, 미설정 시 SQLite)
     const dbSavedId = await saveEvaluationToDb(userId, userEmail, evaluation);
     let savedId = dbSavedId;
 

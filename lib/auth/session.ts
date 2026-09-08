@@ -19,6 +19,21 @@ interface SessionPayload extends SessionUser {
 
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7일
 
+/**
+ * 세션 쿠키에 secure 플래그를 붙일지 여부.
+ *
+ * 예전에는 NEXT_PUBLIC_SITE_URL 이 https 로 시작하는지를 봤는데, NEXT_PUBLIC_ 접두사
+ * 변수는 "빌드 시점"에 값이 코드에 박힌다. 호스팅 대시보드에 나중에 넣거나 빌드에
+ * 전달되지 않으면 운영인데도 플래그가 영영 안 켜져서, 세션 쿠키가 평문으로 오간다.
+ * 그래서 운영에서는 기본으로 켜고, 로컬에서 프로덕션 빌드를 http 로 확인할 때만
+ * COOKIE_SECURE=false 로 끈다.
+ */
+function useSecureCookie(): boolean {
+  if (process.env.COOKIE_SECURE === "true") return true;
+  if (process.env.COOKIE_SECURE === "false") return false;
+  return process.env.NODE_ENV === "production";
+}
+
 function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 32) {
@@ -91,7 +106,7 @@ export function attachSession(res: NextResponse, user: SessionUser): NextRespons
     value: createSessionToken(user),
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production" && !!process.env.NEXT_PUBLIC_SITE_URL?.startsWith("https"),
+    secure: useSecureCookie(),
     path: "/",
     maxAge: MAX_AGE_SECONDS,
   });
