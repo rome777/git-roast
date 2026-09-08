@@ -41,7 +41,7 @@
 
 ### 6. 무중단 듀얼 DB 아키텍처
 - `DATABASE_URL` 설정 시: **PostgreSQL 17** (`pg.Pool`) 완전 연동
-- `DATABASE_URL` 미설정 시: 내장 **SQLite** (`node:sqlite`) 자동 Fallback 동작
+- `DATABASE_URL` 미설정 시: 내장 **SQLite** (`node:sqlite`) 자동 Fallback 동작 — **로컬 개발 전용입니다.** 운영(`NODE_ENV=production`)에서는 폴백하지 않고 에러를 냅니다. 인스턴스마다 데이터가 갈라지고 재배포 때 사라지기 때문입니다.
 
 ---
 
@@ -67,7 +67,7 @@ git-roast/
 │   ├── dashboard/page.tsx            # 개인 분석 히스토리 보관함
 │   ├── login/page.tsx                # 로그인 화면
 │   ├── signup/page.tsx               # 회원가입 화면
-│   ├── result/[id]/page.tsx          # 분석 결과 카드 단건 조회 & 공유 페이지
+│   ├── result/[id]/                  # 공유 카드 (page.tsx 서버 렌더 + 카드별 OG 태그, ResultView.tsx 화면)
 │   └── api/                          # Next.js API Routes (analyze, auth, admin, history)
 ├── components/
 │   ├── evaluation/                   # EvaluationCard, RadarChart, TierBadge
@@ -76,9 +76,10 @@ git-roast/
 │   ├── ai/                           # evaluator.ts (Gemini 연동), prompts.ts
 │   ├── auth/                         # session.ts (HMAC 서명), password.ts (scrypt)
 │   ├── db/                           # database.ts (PostgreSQL/SQLite 듀얼 엔진)
-│   └── github/                       # api.ts (GitHub 데이터 수집), parser.ts (URL 정밀 파싱)
+│   ├── github/                       # api.ts (GitHub 데이터 수집), parser.ts (URL 정밀 파싱)
+│   └── ratelimit.ts                  # 분석 요청량 제한 (DB 고정 윈도 카운터)
 ├── docs/                             # PRD.md, TECH_SPEC.md, WORK_UNITS.md
-├── scripts/                          # DB 마이그레이션 및 관리자 계정 생성 유틸리티
+├── scripts/                          # DB 이관, 비밀번호 설정, 배포 전 점검(preflight), 회귀 검증
 └── HANDOVER.md                       # 개발 인수인계 및 운영 상태 실시간 기록 문서
 ```
 
@@ -87,7 +88,7 @@ git-roast/
 ## 🚀 빠른 시작 가이드 (Quick Start)
 
 ### 1. 요구 사항 (Prerequisites)
-- **Node.js 22.5.0 이상** (`node:sqlite` 내장 모듈 지원 필수)
+- **Node.js 22.5.0 이상** (SQLite 폴백에 쓰이는 `node:sqlite` 내장 모듈 때문). PostgreSQL 만 쓴다면 지연 로드라 더 낮은 버전에서도 동작하지만, 공식 지원 범위는 22.5.0 이상이다.
 - npm 10 이상
 
 ### 2. 설치 (Installation)

@@ -1,6 +1,6 @@
 # 📋 GitRoast 실시간 인수인계 문서 (HANDOVER.md)
 
-> **최종 갱신 시각**: 2026-09-08 17:20:00 (KST)  
+> **최종 갱신 시각**: 2026-09-08 18:10:00 (KST)  
 > **프로젝트 위치**: `c:\aiffel_work\git-roast` (NTFS Junction: `c:\aiffel_work\business`)  
 > **현재 서버 상태**: 운영은 Vercel 에서 상시 가동. 로컬 서버는 떠 있지 않다 — 필요하면 `npm run build && npm start` (프로덕션 빌드를 http 로 볼 때는 `COOKIE_SECURE=false`)  
 > **현재 DB**: **PostgreSQL 17** (로컬 5432, `gitroast` DB) — 관리자 콘솔에 `🐘 PostgreSQL 활성화` 표시  
@@ -129,7 +129,8 @@ c:\aiffel_work\git-roast\
 │   ├── dashboard/page.tsx              # 개인 히스토리 (비로그인 시 로그인 안내 화면)
 │   ├── login/page.tsx                  # 로그인 (→ /api/auth/login)
 │   ├── signup/page.tsx                 # 회원가입 (→ /api/auth/signup)
-│   ├── result/[id]/page.tsx            # 공유 카드 — DB 실조회, 없으면 404 화면
+│   ├── result/[id]/page.tsx            # 공유 카드 — 서버 컴포넌트, generateMetadata 로 카드별 OG 태그
+│   ├── result/[id]/ResultView.tsx      # 🆕 카드 화면 (클라이언트). 서버가 못 찾을 때만 localStorage 보조
 │   ├── docs/page.tsx                   # 🆕 개발 문서 목록 (공개)
 │   ├── docs/[slug]/page.tsx            # 🆕 마크다운 문서 뷰어
 │   ├── not-found.tsx                   # 🆕 404 페이지
@@ -153,7 +154,8 @@ c:\aiffel_work\git-roast\
 │       ├── Navbar.tsx                  # 서버 세션만 신뢰 (localStorage/Supabase 경로 제거)
 │       └── Footer.tsx
 ├── lib/
-│   ├── docs.ts                         # 🆕 공개 문서 화이트리스트 + 마크다운 렌더
+│   ├── docs.ts                         # 공개 문서 화이트리스트 + 마크다운 렌더
+│   ├── ratelimit.ts                    # 🆕 /api/analyze 요청량 제한 (DB 고정 윈도 카운터)
 │   ├── auth/                           # 🆕 인증 레이어
 │   │   ├── password.ts                 # scrypt 해싱/검증, 레거시 자리표시자 판별
 │   │   └── session.ts                  # HMAC 서명 쿠키, requireUser / requireAdmin
@@ -164,8 +166,11 @@ c:\aiffel_work\git-roast\
 │   └── db/database.ts                  # PostgreSQL & SQLite 듀얼 엔진 레이어
 ├── scripts/
 │   ├── verify-auth.mjs                 # 인증·권한 회귀 검증 (npm run verify:auth, 32건)
-│   ├── set-password.mjs                # 🆕 계정 비밀번호 설정 (유일한 설정 경로)
-│   └── migrate-sqlite-to-postgres.mjs  # 🆕 SQLite → PostgreSQL 이관
+│   ├── set-password.mjs                # 계정 비밀번호 설정 (유일한 설정 경로)
+│   ├── migrate-sqlite-to-postgres.mjs  # SQLite → PostgreSQL 이관 (npm run db:migrate)
+│   ├── migrate-postgres-to-postgres.mjs # 🆕 PostgreSQL → 클라우드 이관 (npm run db:copy)
+│   ├── preflight.mjs                   # 🆕 배포 전 점검 (npm run preflight)
+│   └── clean-test-accounts.mjs         # 🆕 tester-* 계정 정리 (npm run db:clean-testers)
 ├── data/gitroast.db                    # 로컬 SQLite (.gitignore 로 제외됨)
 ├── .gitignore                          # 🆕 .env.local / *.db / .next 제외
 └── HANDOVER.md                         # 본 인수인계 문서
@@ -748,3 +753,108 @@ DATABASE_URL="<Neon pooled 문자열>" npm run set-password -- rome777@gmail.com
 ```bash
 DATABASE_URL="$TARGET_DATABASE_URL" npm run set-password -- admin@gitroast.dev "..."
 ```
+
+---
+
+### 2026-09-08 — 문서 ↔ 소스 동기화 감사
+
+배포 후 문서가 실제 코드와 맞는지 전수 대조했다. **네 건이 어긋나 있었다.**
+
+**① `docs/TECH_SPEC.md` 가 존재하지 않는 아키텍처를 설명하고 있었다 (가장 심각 — 공개 문서)**
+
+이 문서는 `/docs/tech-spec` 으로 **누구나 볼 수 있다.** 그런데 서술이 설계 시점 그대로였다.
+
+| 문서의 서술 | 실제 |
+| :--- | :--- |
+| 백엔드 = Supabase (Auth, RLS) | 자체 HMAC 세션 + `scrypt`, `pg` 직결 |
+| 3장 RLS 정책 | **구현되지 않음.** API 라우트의 서버측 게이트로 격리 |
+| 3.1 DDL (`profiles`, `auth.users`) | 실제 스키마는 `lib/db/database.ts` |
+| 배포 = Vercel + Supabase Cloud | Vercel + Neon |
+| AI = Gemini 2.0 / 1.5 Flash | Gemini **2.5** Flash |
+
+문서 상단에 **현행 반영 배너**를 넣고, 스택 목록과 3장 머리에 실제 구현을 병기했다.
+비교·선정 근거 자체는 여전히 유효하므로 본문은 남겼다.
+
+**② `.env.example` 에 코드가 읽는 변수 5개가 빠져 있었다**
+
+`process.env.*` 를 전수 추출해 대조했다. 빠진 것:
+`DB_STRICT`, `SITE_URL`, `POSTGRES_URL`, `SOURCE_DATABASE_URL`, `TARGET_DATABASE_URL`.
+
+특히 `TARGET_DATABASE_URL` 은 **실제로 `.env.local` 에 쓰이고 있는데 템플릿에 없었다** —
+다음 사람이 `.env.example` 만 보고 환경을 만들면 `npm run db:copy` 가 동작하지 않는다.
+8~12번 항목으로 추가했다. 재대조 결과 남은 미기재는 `NODE_ENV` 와 `VERCEL_*` 뿐인데,
+이 둘은 런타임이 주입하므로 템플릿에 둘 이유가 없다.
+
+**③ 파일 구조에 이번 세션의 신규 파일이 빠져 있었다**
+
+`lib/ratelimit.ts`, `app/result/[id]/ResultView.tsx`, 스크립트 3개
+(`migrate-postgres-to-postgres.mjs`, `preflight.mjs`, `clean-test-accounts.mjs`).
+4절 트리에 반영했다.
+타입·목업·유틸(`*/types.ts`, `mockData.ts`, `mockEvaluations.ts`, `utils.ts`)은
+"핵심 파일 구조" 성격상 의도적으로 빼 둔다.
+
+**④ 죽은 코드 — 정확한 범위를 확정했다**
+
+- **`lib/supabase/client.ts` 는 어디에서도 import 되지 않는다.** 완전한 사문서다.
+- `lib/supabase/server.ts` 는 `/api/analyze` 가 import 하지만, Supabase 환경 변수가
+  없어 `createClient()` 가 항상 `null` 을 반환한다 — 그 블록은 실행되지 않는다.
+- **`supabase/schema.sql` 은 실제 스키마가 아니다.** 이 파일은 `profiles` /
+  `evaluations` / `favorites` 3개를 정의하지만, 실제로 쓰이는 것은
+  `lib/db/database.ts` 의 `users` / `evaluations` / `favorites` / `rate_limits` 다.
+  참조하는 곳은 `docs/WORK_UNITS.md` 뿐이다.
+  **스키마를 고칠 일이 생기면 `supabase/schema.sql` 이 아니라 `lib/db/database.ts` 를 고쳐야 한다.**
+
+지우지는 않았다 — 파괴적 작업이고, Supabase 를 다시 붙일 여지를 사용자가 판단할 몫이다.
+다만 **다음 사람이 `schema.sql` 을 고치고 아무 효과가 없어 헤매는 일**을 막기 위해 여기 남긴다.
+
+**대조가 맞았던 것**
+
+- HANDOVER 4절이 언급하는 파일 경로 **전부 실재**
+- `package.json` 의 스크립트 10개와 문서의 `npm run *` 언급 **불일치 없음**
+- `.env.example` ↔ `HANDOVER` 환경 변수 표 **일치**
+
+---
+
+### 2026-09-08 — 🚨 배포 번들에 로컬 DB 가 딸려 올라가 있었다
+
+**질의**: 원격 서버에서 `DATABASE_URL` 미설정 시 SQLite 폴백이 정말 동작하는가?
+
+**답: 동작한다. 그리고 그게 문제였다.**
+
+환경 변수를 넣지 않은 **Preview 배포로 재현**했다 (Preview 환경에는 변수를 넣지 않았으므로
+`DATABASE_URL` 이 비어 있는 상태가 그대로 재현된다).
+
+| 요청 | 결과 | 해석 |
+| :--- | :--- | :--- |
+| `/api/evaluations/eval-...znzm1` (옛 SQLite 에 존재) | **200 + 데이터** | 번들의 `data/gitroast.db` 를 읽었다 |
+| `/api/evaluations/eval-...m9kya` (Neon 에만 존재) | 404 | Neon 을 보지 않았다 |
+| `POST /api/auth/demo` | 500 (`SESSION_SECRET` 없음) | **`.env.local` 은 올라가지 않았다** ✅ |
+
+**두 가지가 드러났다.**
+
+1. **`.gitignore` 에 있는 `data/gitroast.db` 가 배포 번들에 포함됐다.**
+   Vercel CLI 는 `.gitignore` 를 그대로 따르지 않는다. 이 파일에는 **실사용자 이메일,
+   비밀번호 해시, 분석 기록**이 들어 있다. (`.env.local` 은 CLI 가 기본 제외해서 안 올라갔다.)
+
+2. **`DATABASE_URL` 이 비면 운영에서도 조용히 SQLite 로 내려갔다.**
+   `shouldFallbackToSqlite()` 는 *접속 실패* 경로(`handlePgError`)에서만 검사된다.
+   변수가 **아예 없으면** `isPostgresConfigured()` 가 false 라 그 검사를 통과조차 하지 않고
+   곧장 SQLite 로 간다. 결과는 **낡은 스냅샷을 200 으로 서빙**하는 것 — 에러보다 나쁘다.
+
+**조치**
+
+- **`.vercelignore` 신설** — `data/`, `.env*`, `HANDOVER.md` 등을 배포에서 제외한다.
+  `.gitignore` 와 별개 파일이 필요하다는 점이 핵심이다.
+- **`getSqliteDb()` 진입부에 운영 차단** — `shouldFallbackToSqlite()` 가 false 면
+  SQLite 를 열지 않고 에러를 던진다. 이제 변수 미설정도 같은 정책을 받는다.
+- `README.md` 의 "미설정 시 SQLite 자동 Fallback" 서술에 **로컬 개발 전용**임을 명시했다.
+
+**검증 (로컬 프로덕션 빌드)**
+
+| 조건 | 결과 |
+| :--- | :--- |
+| `NODE_ENV=production`, `DATABASE_URL` 없음 | **500** — 낡은 스냅샷을 서빙하지 않는다 ✅ |
+| 위 + `DB_STRICT=false` (명시적 탈출구) | SQLite 정상 동작 ✅ |
+
+> 운영 배포는 `DATABASE_URL` 이 설정돼 있어 이 경로를 타지 않았다. 즉 **실제 사고는 없었다.**
+> 다만 변수를 지우거나 오타를 내는 순간 조용히 틀린 데이터를 주는 상태였다.

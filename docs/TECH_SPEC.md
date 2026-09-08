@@ -1,5 +1,23 @@
 # [기술명세서] GitRoast - 아키텍처, 스택 비교 및 보안 설계 (TECH_SPEC)
 
+> ### ⚠️ 이 문서는 **설계 시점의 기획안**이다 (2026-09-08 현행 반영)
+>
+> 아래 1~3장의 **스택 선정 근거와 비교 분석은 지금도 유효**하지만, 구현하면서
+> 백엔드 선택이 바뀌었다. **현재 코드와 다른 부분**을 먼저 밝힌다.
+>
+> | 이 문서의 서술 | 실제 구현 |
+> | :--- | :--- |
+> | 백엔드 & BaaS: **Supabase** (Auth, RLS) | **직접 구현한 세션 체계** — HMAC-SHA256 서명 쿠키 + `scrypt` 비밀번호 (`lib/auth/`) |
+> | DB 접근: Supabase 클라이언트 + **RLS** | **`pg` 드라이버 직결.** RLS 를 쓰지 않고 **API 라우트에서 서버측 권한 게이트**로 격리한다 (`requireUser` / `requireAdmin`) |
+> | 3.1 DDL (`profiles`, `auth.users` 참조) | 실제 스키마는 **`lib/db/database.ts`** 에 있다 (`users` / `evaluations` / `favorites` / `rate_limits`). `supabase/schema.sql` 은 **쓰이지 않는 사문서**다 |
+> | 3.2 RLS 정책 | **구현되지 않았다.** 권한 판정은 매 요청 DB 에서 role 을 다시 읽어 수행한다 |
+> | 배포: Vercel + **Supabase Cloud** | Vercel + **Neon** (PostgreSQL) |
+> | AI: Gemini 2.0 / 1.5 Flash | **Gemini 2.5 Flash** (`gemini-2.5-flash`) |
+>
+> 왜 바꿨는지는 저장소의 `HANDOVER.md` 2026-09-08 항목에 남아 있다.
+> 요약하면, Supabase Auth 를 붙이기 전에 자체 세션이 먼저 필요해졌고
+> (비밀번호 실검증·쿠키 위조 방지), 그걸 만들고 나니 Supabase 를 쓸 이유가 사라졌다.
+
 ---
 
 ## 1. 기술 스택 비교 및 최종 선정 (Tech Stack Comparison)
@@ -19,10 +37,10 @@
 - **프레임워크**: **Next.js 14+ (TypeScript, App Router)**
 - **스타일링 & UI**: **Tailwind CSS + shadcn/ui + Lucide Icons + Recharts** (레이더 차트 시각화)
 - **카드 이미지 변환**: **html-to-image** (클라이언트 사이드 고해상도 PNG 변환)
-- **백엔드 & BaaS**: **Supabase** (PostgreSQL, Supabase Auth, Row Level Security)
+- **백엔드 & BaaS**: ~~**Supabase** (PostgreSQL, Supabase Auth, Row Level Security)~~ → **자체 세션 + `pg` 직결** (위 배너 참조)
 - **AI 엔진**: **Google Gemini 2.0 Flash / 1.5 Flash** (`@google/genai` or official SDK)
 - **데이터 소스**: **GitHub REST API v3** (Octokit / Fetch API)
-- **배포 환경**: **Vercel** (프론트/서버리스) + **Supabase Cloud** (DB/Auth)
+- **배포 환경**: **Vercel** (프론트/서버리스) + ~~Supabase Cloud~~ → **Neon** (PostgreSQL)
 
 ---
 
@@ -52,6 +70,9 @@ graph TD
 ---
 
 ## 3. 데이터베이스 스키마 및 RLS 설계 (Database & Security)
+
+> ⚠️ **이 장은 기획안이며 구현되지 않았다.** 실제 스키마는 `lib/db/database.ts`,
+> 권한 격리는 RLS 가 아니라 API 라우트의 서버측 게이트(`lib/auth/session.ts`)로 한다.
 
 ### 3.1 테이블 정의 (DDL)
 

@@ -120,6 +120,21 @@ async function initPgSchema(pool: Pool) {
 
 // 2. SQLite Fallback Engine
 function getSqliteDb(): any {
+  // 운영에서 SQLite 경로로 내려오는 것은 그 자체가 사고다.
+  //
+  // shouldFallbackToSqlite() 는 원래 "PostgreSQL 접속 실패" 만 막았는데,
+  // DATABASE_URL 이 아예 비어 있으면 isPostgresConfigured() 가 false 라
+  // 그 검사를 거치지 않고 곧장 여기로 온다.
+  // 실제로 배포에서 확인했다 — 환경 변수가 없는 인스턴스가 번들에 딸려 올라간
+  // data/gitroast.db 의 낡은 스냅샷을 200 으로 서빙했다. 조용히 틀린 데이터를
+  // 주는 것이 에러를 내는 것보다 훨씬 나쁘다.
+  if (!shouldFallbackToSqlite()) {
+    throw new Error(
+      "DATABASE_URL 이 설정되지 않았습니다. 운영에서는 SQLite 로 넘어가지 않습니다 " +
+        "(인스턴스마다 데이터가 갈라지고 재배포 때 사라집니다)."
+    );
+  }
+
   if (!sqliteDbInstance) {
     // node:sqlite 는 Node 22.5+ 에만 있다. top-level import 로 두면 PostgreSQL 만
     // 쓰는 배포 환경에서도 런타임이 그보다 낮을 때 모듈 로드 단계에서 앱 전체가

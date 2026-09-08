@@ -1,0 +1,16 @@
+# 배포 번들에서 제외할 것.
+# .gitignore 와 별개다 — Vercel CLI 는 .gitignore 를 그대로 따르지 않는다.
+# 실제로 data/gitroast.db 가 배포에 딸려 올라가, DATABASE_URL 이 없는 환경에서
+# 앱이 그 낡은 스냅샷을 조용히 서빙하는 것을 확인했다 (2026-09-08).
+
+# 로컬 DB. 실사용자 이메일·비밀번호 해시·분석 기록이 들어 있다.
+data/
+
+# 환경 변수 (Vercel CLI 가 기본 제외하지만 명시해 둔다)
+.env
+.env.*
+
+# 문서·개발 산출물
+HANDOVER.md
+.next/
+coverage/
