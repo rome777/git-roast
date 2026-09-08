@@ -488,6 +488,24 @@ c:\aiffel_work\git-roast\
 
 ---
 
+### 2026-09-08 — 하단 안내 문구 보완 (`app/page.tsx`)
+
+- "공개(Public) 리포지토리만 분석 가능합니다" → **"공개(Public) 계정 및 리포지토리만 분석 가능합니다"**.
+  - 이유: 분석 대상이 리포지토리 하나뿐 아니라 계정(사용자) 단위 분석도 지원하므로, 제한 범위를 정확히 반영.
+
+---
+
+### 2026-09-08 — 계정 설정 페이지 신설, 회원 탈퇴를 대시보드에서 이동
+
+1. **`app/account/page.tsx` 신설**:
+   - 로그인한 사용자의 계정 정보와 회원 탈퇴를 모아 관리하는 전용 페이지.
+   - `DeleteAccountSection` 을 `app/dashboard/page.tsx` 에서 이곳으로 옮김 — 히스토리 목록과 계정 관리는 성격이 다른 화면이라 분리.
+2. **`components/layout/Navbar.tsx`**: 로그인 상태일 때 프로필 칩과 로그아웃 버튼 사이에 `/account` 로 가는 계정(⚙) 버튼 추가.
+3. **`app/dashboard/page.tsx`**: `DeleteAccountSection` import·렌더링 제거 (더 이상 대시보드 소관 아님).
+4. `README.md` 의 회원 탈퇴 설명을 "대시보드 맨 아래" → "계정 버튼 → `/account`" 로 갱신.
+
+---
+
 ### 2026-09-08 — 배포 대상 확정(Vercel + Neon) 및 공개 배포 전 코드 정비
 
 **① 호스팅 선택 — "완전 무료 + 상시 + Postgres" 조건으로 실제 조사**

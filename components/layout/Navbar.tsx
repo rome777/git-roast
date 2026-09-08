@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, History, LogIn, LogOut, User, Github, Shield } from "lucide-react";
+import { Flame, History, LogIn, LogOut, User, Github, Shield, Settings } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 
 export function Navbar() {
@@ -144,6 +144,17 @@ export function Navbar() {
                     )}
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
                   </div>
+                  <Link
+                    href="/account"
+                    title="계정 설정"
+                    className={`p-2 rounded-lg transition-colors ${
+                      pathname === "/account"
+                        ? "text-white bg-slate-800"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Link>
                   <button
                     onClick={handleLogout}
                     disabled={loggingOut}

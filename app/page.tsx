@@ -232,7 +232,7 @@ export default function HomePage() {
 
         {/* Public Repository Notice */}
         <p className="mt-2 text-xs text-slate-400 text-center">
-          공개(Public) 리포지토리만 분석 가능합니다
+          공개(Public) 계정 및 리포지토리만 분석 가능합니다
         </p>
 
         {/* 입력 대상 자동 감지 */}
