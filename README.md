@@ -1,5 +1,7 @@
 # 🔥 GitRoast (깃로스트)
 
+**배포:** https://git-roast-three.vercel.app
+
 > **"당신의 깃허브, 잔디밭인가요 사막인가요?"**  
 > GitHub 공개 리포지토리와 개발자 프로필을 AI(Google Gemini 2.5 Flash)로 심층 해부하여, 뼈 때리는 팩폭(Roast)과 시니어 아키텍트의 기술 리뷰(Review)를 생성하는 풀스택 서비스입니다.
 

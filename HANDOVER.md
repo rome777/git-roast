@@ -1,11 +1,12 @@
 # 📋 GitRoast 실시간 인수인계 문서 (HANDOVER.md)
 
-> **최종 갱신 시각**: 2026-09-08 16:30:00 (KST)  
+> **최종 갱신 시각**: 2026-09-08 17:20:00 (KST)  
 > **프로젝트 위치**: `c:\aiffel_work\git-roast` (NTFS Junction: `c:\aiffel_work\business`)  
 > **현재 서버 상태**: `http://localhost:3000` (Next.js 14 프로덕션 빌드 가동 중)  
 > **현재 DB**: **PostgreSQL 17** (로컬 5432, `gitroast` DB) — 관리자 콘솔에 `🐘 PostgreSQL 활성화` 표시  
 > **원격 저장소**: [`github.com/rome777/git-roast`](https://github.com/rome777/git-roast) (main)  
-> **배포 대상 (결정됨)**: **Vercel(Hobby) + Neon(Free)** — 아직 배포 전. 근거와 남은 절차는 6절 마지막 항목 참조
+> **운영 URL**: **https://git-roast-three.vercel.app** (Vercel `somsaps-projects/git-roast`)  
+> **운영 DB**: **Neon** (ap-southeast-1, pooled) — 2026-09-08 배포 완료. 상세는 6절 마지막 항목
 
 ---
 
@@ -685,3 +686,64 @@ DATABASE_URL="<Neon pooled 문자열>" npm run set-password -- <이메일> "<충
 
 > `npm run preflight` 는 오늘 실제로 겪은 사고(`git commit -a` 가 새 파일을 담지 않아
 > HEAD 가 빌드되지 않은 것)를 잡도록 **추적되지 않은 소스 파일** 검사를 넣어 뒀다.
+
+---
+
+### 2026-09-08 — 🚀 운영 배포 완료 (Vercel + Neon)
+
+**배포 결과**
+
+| 항목 | 값 |
+| :--- | :--- |
+| **공개 URL** | **https://git-roast-three.vercel.app** |
+| Vercel 프로젝트 | `somsaps-projects/git-roast` (Node 24.x, Next.js 프리셋) |
+| DB | Neon `ep-delicate-mud-b3sfry6d-pooler...ap-southeast-1` / `neondb` (pooled, sslmode=require) |
+| 이관 실적 | users 4 / evaluations 18 / favorites 0 — 건수 대조 일치 |
+
+> ⚠️ `git-roast-somsaps-projects.vercel.app` 는 팀 스코프 별칭이라 **Vercel SSO 로 막혀 있다**(302).
+> 공유에는 위의 `git-roast-three.vercel.app` 를 쓴다. `git-roast.vercel.app` 은 **남의 프로젝트**다.
+
+**운영 환경에서 실측 검증한 것**
+
+| 검증 | 결과 |
+| :--- | :--- |
+| 실제 AI 분석 (`vercel/next.js`, 순한맛) | 200 · SSS 98점 · **8.4초** (콜드스타트 + Neon 웨이크업 포함) |
+| Neon 실조회 (공유 카드 API) | 200, 이관된 데이터 그대로 반환 |
+| 공유 카드 메타태그 | 카드별로 다름. `og:url` 이 절대경로로 정확 |
+| 요청량 제한 | 비로그인 3회 초과 시 429 |
+| 데모 로그인 차단 | 403 (`DISABLE_DEMO_LOGIN=true` 적용됨) |
+| 세션 쿠키 | `Secure; HttpOnly; SameSite=lax` — 운영에서 secure 플래그 실제로 켜짐 |
+
+`maxDuration=60` 대비 8.4초라 여유가 크다. Vercel Hobby 함수 상한에 걸릴 일은 없다.
+
+**설정 메모**
+
+- 운영 `SESSION_SECRET` 은 **로컬과 다른 값을 새로 생성해** 주입했다. 화면에 띄우지 않고
+  파이프로 넣었으므로 어디에도 기록이 없다. 필요하면 다시 생성해 교체한다.
+- `NEXT_PUBLIC_SITE_URL` 을 명시했지만, 없어도 `app/layout.tsx` 의 `resolveSiteUrl()` 이
+  `VERCEL_PROJECT_PRODUCTION_URL` 로 폴백해 정상 동작하는 것을 실제로 확인했다.
+- `vercel link` 가 `.gitignore` 에 `.vercel` 과 `.env*` 를 추가했다. `.env*` 가
+  `.env.example` 까지 가리므로 `!.env.example` 예외를 덧붙였다.
+- **GitHub 자동 배포는 연결되지 않았다.** `vercel git connect` 가 실패한다 —
+  Vercel 대시보드에서 GitHub 앱 권한을 한 번 승인해야 한다. 그전까지는
+  `vercel deploy --prod` 로 수동 배포한다.
+
+**🚨 배포 직후 확인된 노출 (즉시 조치 필요)**
+
+공개 URL 에서 `admin@gitroast.dev` 로 **로그인이 실제로 성공한다(HTTP 200).**
+비밀번호가 공개 git 히스토리(⑧ 참조)에 남아 있고, 이 계정은 `role=admin` 이라
+`/admin` 콘솔 — 전체 사용자의 분석 내역과 이메일 — 이 열린다.
+`rome777@gmail.com` 도 같은 값이다.
+
+로컬에서만 돌 때는 보류해도 됐지만, **지금은 공개 서비스다.**
+
+```bash
+DATABASE_URL="<Neon pooled 문자열>" npm run set-password -- admin@gitroast.dev "충분히 긴 임의 문자열"
+DATABASE_URL="<Neon pooled 문자열>" npm run set-password -- rome777@gmail.com "다른 임의 문자열"
+```
+
+`.env.local` 의 `TARGET_DATABASE_URL` 이 그 문자열이므로 아래처럼 써도 된다.
+
+```bash
+DATABASE_URL="$TARGET_DATABASE_URL" npm run set-password -- admin@gitroast.dev "..."
+```

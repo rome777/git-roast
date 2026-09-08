@@ -35,3 +35,7 @@ Thumbs.db
 
 # 테스트 / 커버리지
 /coverage
+
+.vercel
+.env*
+!.env.example
