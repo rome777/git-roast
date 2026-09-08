@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserByEmailFromDb } from "@/lib/db/database";
+import { getUserByEmailFromDb, resolveDisplayName } from "@/lib/db/database";
 import { getSession, clearSession } from "@/lib/auth/session";
 
 export async function GET(req: NextRequest) {
@@ -10,12 +10,18 @@ export async function GET(req: NextRequest) {
       return clearSession(NextResponse.json({ user: null }));
     }
 
-    // role 은 토큰이 아니라 DB 를 신뢰한다.
+    // role 과 닉네임 모두 토큰이 아니라 DB 를 신뢰한다.
+    // 닉네임은 토큰에 없다 — 넣으면 변경이 재로그인 전까지 반영되지 않는다.
     const dbUser = await getUserByEmailFromDb(session.email);
     if (!dbUser) return clearSession(NextResponse.json({ user: null }));
 
     return NextResponse.json({
-      user: { id: dbUser.id, email: dbUser.email, role: dbUser.role },
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        role: dbUser.role,
+        nickname: resolveDisplayName(dbUser),
+      },
     });
   } catch (error: any) {
     console.error("Auth me error:", error);

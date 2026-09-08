@@ -3,12 +3,14 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, History, LogIn, LogOut, User, Github, Shield, Settings } from "lucide-react";
+import { Flame, History, LogIn, LogOut, User, Github, Shield } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 
 export function Navbar() {
   const pathname = usePathname();
-  const [user, setUser] = useState<{ email: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; role?: string; nickname?: string } | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -20,7 +22,11 @@ export function Navbar() {
       if (res.ok) {
         const json = await res.json();
         if (json?.user?.email) {
-          setUser({ email: json.user.email, role: json.user.role });
+          setUser({
+            email: json.user.email,
+            role: json.user.role,
+            nickname: json.user.nickname,
+          });
           setLoading(false);
           return;
         }
@@ -132,10 +138,18 @@ export function Navbar() {
             <>
               {user ? (
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 border border-slate-700/80 text-xs text-slate-200 font-medium shadow-sm">
+                  <Link
+                    href="/account"
+                    title="계정 설정"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 border text-xs text-slate-200 font-medium shadow-sm transition-colors ${
+                      pathname === "/account"
+                        ? "border-orange-500/60"
+                        : "border-slate-700/80 hover:border-slate-600 hover:text-white"
+                    }`}
+                  >
                     <User className="w-3.5 h-3.5 text-orange-400" />
                     <span className="max-w-[130px] truncate font-semibold">
-                      {user.email.split("@")[0]}
+                      {user.nickname || user.email.split("@")[0]}
                     </span>
                     {isAdminUser && (
                       <span className="text-[10px] font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-500/30">
@@ -143,17 +157,6 @@ export function Navbar() {
                       </span>
                     )}
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-                  </div>
-                  <Link
-                    href="/account"
-                    title="계정 설정"
-                    className={`p-2 rounded-lg transition-colors ${
-                      pathname === "/account"
-                        ? "text-white bg-slate-800"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-                    }`}
-                  >
-                    <Settings className="w-4 h-4" />
                   </Link>
                   <button
                     onClick={handleLogout}

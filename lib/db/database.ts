@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import { EvaluationResult } from "@/lib/ai/types";
+import { generateNickname } from "@/lib/auth/nickname";
+import { normalizeNickname } from "@/lib/auth/nickname-rules";
 
 let sqliteDbInstance: any = null;
 let pgPoolInstance: Pool | null = null;
@@ -64,6 +66,7 @@ async function initPgSchema(pool: Pool) {
       id VARCHAR(100) PRIMARY KEY,
       email VARCHAR(255) UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      nickname VARCHAR(40),
       role VARCHAR(50) NOT NULL DEFAULT 'user',
       email_verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -101,19 +104,20 @@ async function initPgSchema(pool: Pool) {
   `);
 
   await ensureEmailVerifiedColumnPg(pool);
+  await ensureNicknameColumnPg(pool);
 
   // Seed default admin users if table is empty
   const res = await pool.query("SELECT count(*) as count FROM users;");
   if (parseInt(res.rows[0].count, 10) === 0) {
     const now = new Date().toISOString();
     await pool.query(
-      `INSERT INTO users (id, email, password_hash, role, email_verified, created_at) VALUES
-       ($1, $2, $3, $4, TRUE, $5),
-       ($6, $7, $8, $9, TRUE, $10)
+      `INSERT INTO users (id, email, password_hash, nickname, role, email_verified, created_at) VALUES
+       ($1, $2, $3, $4, $5, TRUE, $6),
+       ($7, $8, $9, $10, $11, TRUE, $12)
        ON CONFLICT (email) DO NOTHING;`,
       [
-        "user-rome777", "rome777@gmail.com", "mock_pw_hash", "admin", now,
-        "user-admin", "admin@gitroast.dev", "mock_pw_hash", "admin", now,
+        "user-rome777", "rome777@gmail.com", "mock_pw_hash", generateNickname(), "admin", now,
+        "user-admin", "admin@gitroast.dev", "mock_pw_hash", generateNickname(), "admin", now,
       ]
     );
   }
@@ -149,6 +153,34 @@ async function ensureEmailVerifiedColumnPg(pool: Pool) {
   console.info(
     `[db] users.email_verified 추가 — 기존 계정 ${updated.rowCount}건을 확인 완료로 처리했습니다.`
   );
+}
+
+/**
+ * users.nickname 을 나중에 추가한다 (2026-09-08).
+ *
+ * NOT NULL 로 만들지 않는다. 기존 행에 넣을 기본값이 사람마다 달라야 하므로
+ * (임의 생성) 한 번의 ALTER 로는 채울 수 없다. 컬럼을 먼저 붙이고 행마다 채운다.
+ *
+ * 이메일 아이디로 채우지 않는 이유는 lib/auth/nickname.ts 주석 참조.
+ * 계정 수가 적어 행별 UPDATE 로 충분하다. 컬럼이 없던 순간에만 한 번 돈다.
+ */
+async function ensureNicknameColumnPg(pool: Pool) {
+  const exists = await pool.query(
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'nickname';`
+  );
+  if (exists.rowCount) return;
+
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname VARCHAR(40);`);
+
+  const rows = await pool.query(`SELECT id FROM users WHERE nickname IS NULL OR nickname = '';`);
+  for (const row of rows.rows) {
+    await pool.query(`UPDATE users SET nickname = $1 WHERE id = $2;`, [
+      generateNickname(),
+      row.id,
+    ]);
+  }
+  console.info(`[db] users.nickname 추가 — 기존 계정 ${rows.rowCount}건에 임의 닉네임을 넣었습니다.`);
 }
 
 // 2. SQLite Fallback Engine
@@ -194,6 +226,7 @@ function initSqliteSchema(db: any) {
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      nickname TEXT,
       role TEXT NOT NULL DEFAULT 'user',
       email_verified INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
@@ -230,6 +263,7 @@ function initSqliteSchema(db: any) {
   `);
 
   ensureEmailVerifiedColumnSqlite(db);
+  ensureNicknameColumnSqlite(db);
 
   const checkUser = db.prepare("SELECT count(*) as count FROM users;").get() as { count: number };
   if (!checkUser || checkUser.count === 0) {
@@ -237,12 +271,29 @@ function initSqliteSchema(db: any) {
     // 컬럼을 이름으로 지정한다. `INSERT INTO users VALUES (...)` 처럼 위치로만 넣으면
     // 컬럼이 하나 늘어나는 순간 조용히 깨진다(실제로 email_verified 를 붙이며 겪었다).
     const seed = db.prepare(
-      "INSERT INTO users (id, email, password_hash, role, email_verified, created_at) VALUES (?, ?, ?, ?, 1, ?);"
+      "INSERT INTO users (id, email, password_hash, nickname, role, email_verified, created_at) VALUES (?, ?, ?, ?, ?, 1, ?);"
     );
-    seed.run("user-rome777", "rome777@gmail.com", "mock_pw_hash", "admin", now);
-    seed.run("user-admin", "admin@gitroast.dev", "mock_pw_hash", "admin", now);
-    seed.run("user-rookie", "rookie@example.com", "mock_pw_hash", "user", now);
+    seed.run("user-rome777", "rome777@gmail.com", "mock_pw_hash", generateNickname(), "admin", now);
+    seed.run("user-admin", "admin@gitroast.dev", "mock_pw_hash", generateNickname(), "admin", now);
+    seed.run("user-rookie", "rookie@example.com", "mock_pw_hash", generateNickname(), "user", now);
   }
+}
+
+/** PostgreSQL 쪽 ensureNicknameColumnPg 와 같은 일. 설명은 그쪽 주석 참조. */
+function ensureNicknameColumnSqlite(db: any) {
+  const cols = db.prepare("PRAGMA table_info(users);").all() as Array<{ name: string }>;
+  if (cols.some((c) => c.name === "nickname")) return;
+
+  db.exec("ALTER TABLE users ADD COLUMN nickname TEXT;");
+
+  const rows = db
+    .prepare("SELECT id FROM users WHERE nickname IS NULL OR nickname = '';")
+    .all() as Array<{ id: string }>;
+  const update = db.prepare("UPDATE users SET nickname = ? WHERE id = ?;");
+  for (const row of rows) {
+    update.run(generateNickname(), row.id);
+  }
+  console.info(`[db] users.nickname 추가 — 기존 계정 ${rows.length}건에 임의 닉네임을 넣었습니다.`);
 }
 
 /** PostgreSQL 쪽 ensureEmailVerifiedColumnPg 와 같은 일. 설명은 그쪽 주석 참조. */
@@ -612,17 +663,22 @@ export function isAdminEmail(email: string): boolean {
  *
  * `emailVerified` 는 사람이 확인 링크를 누르지 않아도 되는 계정(데모 계정 등)에만 쓴다.
  * 일반 가입은 기본값 false 로 두고 확인 메일을 거쳐야 한다.
+ *
+ * 닉네임은 여기서 임의로 만들어 넣는다. 가입 폼에서 받지 않는 이유는 가입 단계를
+ * 늘리지 않으려는 것이고, 비워 두지 않는 이유는 그러면 화면마다 "닉네임이 없을 때"
+ * 를 따로 처리해야 하기 때문이다. 사용자는 /account 에서 언제든 바꾼다.
  */
 export async function createUserInDb(
   email: string,
   passwordHash: string,
   opts: { emailVerified?: boolean } = {}
-): Promise<{ id: string; email: string; role: string } | null> {
+): Promise<{ id: string; email: string; role: string; nickname: string } | null> {
   const normalized = email.trim().toLowerCase();
   const role = isAdminEmail(normalized) ? "admin" : "user";
   const id = `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
   const verified = opts.emailVerified === true;
+  const nickname = generateNickname();
 
   const existing = await getUserByEmailFromDb(normalized);
   if (existing) return null;
@@ -632,11 +688,11 @@ export async function createUserInDb(
       const pool = getPgPool();
       await initPgSchema(pool);
       const res = await pool.query(
-        `INSERT INTO users (id, email, password_hash, role, email_verified, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO users (id, email, password_hash, nickname, role, email_verified, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (email) DO NOTHING
-         RETURNING id, email, role;`,
-        [id, normalized, passwordHash, role, verified, now]
+         RETURNING id, email, role, nickname;`,
+        [id, normalized, passwordHash, nickname, role, verified, now]
       );
       return res.rows[0] || null;
     } catch (err) {
@@ -646,10 +702,51 @@ export async function createUserInDb(
 
   const db = getSqliteDb();
   db.prepare(
-    `INSERT INTO users (id, email, password_hash, role, email_verified, created_at)
-     VALUES (?, ?, ?, ?, ?, ?);`
-  ).run(id, normalized, passwordHash, role, verified ? 1 : 0, now);
-  return { id, email: normalized, role };
+    `INSERT INTO users (id, email, password_hash, nickname, role, email_verified, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?);`
+  ).run(id, normalized, passwordHash, nickname, role, verified ? 1 : 0, now);
+  return { id, email: normalized, role, nickname };
+}
+
+/**
+ * 화면에 띄울 이름. 닉네임이 비어 있으면 이메일 아이디로 대신한다.
+ *
+ * 마이그레이션 전에 만들어진 행이나 ALTER 만 되고 채우기가 실패한 행이 실제로
+ * 있을 수 있다. 그때 이름이 빈칸으로 나오면 사용자는 로그인이 깨진 줄로 안다.
+ */
+export function resolveDisplayName(
+  user: { nickname?: unknown; email?: string } | null | undefined
+): string {
+  const nickname = normalizeNickname(user?.nickname);
+  if (nickname) return nickname;
+  return user?.email?.split("@")[0] || "";
+}
+
+/** 닉네임 변경. 표시용 값이라 UNIQUE 를 걸지 않으므로 중복 검사도 하지 않는다. */
+export async function updateUserNicknameInDb(email: string, nickname: string): Promise<boolean> {
+  const normalized = email.trim().toLowerCase();
+  const value = normalizeNickname(nickname);
+
+  if (isPostgresConfigured()) {
+    try {
+      const pool = getPgPool();
+      await initPgSchema(pool);
+      const res = await pool.query(
+        `UPDATE users SET nickname = $1 WHERE LOWER(email) = LOWER($2);`,
+        [value, normalized]
+      );
+      return (res.rowCount ?? 0) > 0;
+    } catch (err) {
+      handlePgError("updateUserNickname", err);
+      return false;
+    }
+  }
+
+  const db = getSqliteDb();
+  const before = db.prepare(`SELECT id FROM users WHERE LOWER(email) = LOWER(?);`).get(normalized);
+  if (!before) return false;
+  db.prepare(`UPDATE users SET nickname = ? WHERE LOWER(email) = LOWER(?);`).run(value, normalized);
+  return true;
 }
 
 /**
@@ -687,7 +784,11 @@ export async function setEmailVerifiedInDb(email: string): Promise<boolean> {
   return true;
 }
 
-/** 레거시 자리표시자(mock_pw_hash) 계정이 첫 로그인에서 비밀번호를 확정할 때 사용. */
+/**
+ * 비밀번호 해시 교체. 두 경로가 쓴다.
+ * 1. 레거시 자리표시자(mock_pw_hash) 계정이 첫 로그인에서 비밀번호를 확정할 때
+ * 2. /account 에서 비밀번호를 변경할 때 (현재 비밀번호 확인은 호출부의 책임)
+ */
 export async function setUserPasswordHash(email: string, passwordHash: string): Promise<void> {
   const normalized = email.trim().toLowerCase();
 

@@ -4,10 +4,13 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { UserCircle } from "lucide-react";
 import { LoadingScreen } from "@/components/ui/Spinner";
+import { NicknameSection } from "@/components/auth/NicknameSection";
+import { PasswordChangeSection } from "@/components/auth/PasswordChangeSection";
 import { DeleteAccountSection } from "@/components/auth/DeleteAccountSection";
 
 export default function AccountPage() {
   const [email, setEmail] = useState<string | null>(null);
+  const [nickname, setNickname] = useState("");
   const [evaluationCount, setEvaluationCount] = useState(0);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -16,20 +19,27 @@ export default function AccountPage() {
     // 계정 정보와 삭제 시 사라질 건수 모두 서버 세션 기준으로만 판정한다.
     const load = async () => {
       try {
-        const res = await fetch("/api/history");
+        const [meRes, historyRes] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch("/api/history"),
+        ]);
 
-        if (res.status === 401) {
+        const me = meRes.ok ? await meRes.json() : null;
+        if (!me?.user?.email) {
           setNeedsLogin(true);
           return;
         }
 
-        if (res.ok) {
-          const json = await res.json();
-          if (json.email) setEmail(json.email);
-          setEvaluationCount(Array.isArray(json.evaluations) ? json.evaluations.length : 0);
+        setEmail(me.user.email);
+        setNickname(me.user.nickname || "");
+
+        if (historyRes.ok) {
+          const history = await historyRes.json();
+          setEvaluationCount(Array.isArray(history.evaluations) ? history.evaluations.length : 0);
         }
       } catch (err) {
         console.warn("계정 정보 조회 실패:", err);
+        setNeedsLogin(true);
       } finally {
         setLoading(false);
       }
@@ -37,6 +47,13 @@ export default function AccountPage() {
 
     load();
   }, []);
+
+  // 내비게이션의 이름표도 같은 값을 쓴다. 알려 주지 않으면 저장한 뒤에도
+  // 상단에는 옛 닉네임이 남아 "저장이 안 됐다" 로 읽힌다.
+  const handleNicknameSaved = (next: string) => {
+    setNickname(next);
+    window.dispatchEvent(new Event("gitroast-auth-change"));
+  };
 
   if (loading) {
     return <LoadingScreen message="계정 정보 불러오는 중..." />;
@@ -76,10 +93,15 @@ export default function AccountPage() {
         <div className="flex items-center gap-2 text-xs xl:text-sm font-bold text-orange-400 uppercase tracking-wider mb-1">
           <UserCircle className="w-4 h-4" /> 계정 설정
         </div>
-        <h1 className="text-2xl sm:text-3xl xl:text-4xl font-black text-white">{email}</h1>
-        <p className="text-xs xl:text-sm text-slate-400 mt-1">
-          로그인 계정 정보와 회원 탈퇴를 이 페이지에서 관리합니다.
-        </p>
+        <h1 className="text-2xl sm:text-3xl xl:text-4xl font-black text-white break-all">
+          {nickname || email}
+        </h1>
+        <p className="text-xs xl:text-sm text-slate-400 mt-1">{email}</p>
+      </div>
+
+      <div className="space-y-4">
+        <NicknameSection nickname={nickname} onSaved={handleNicknameSaved} />
+        <PasswordChangeSection email={email} />
       </div>
 
       <DeleteAccountSection email={email} evaluationCount={evaluationCount} />

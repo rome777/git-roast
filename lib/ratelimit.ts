@@ -119,7 +119,7 @@ function tooMany(rule: Rule, now: Date): RateLimitVerdict {
  */
 export async function enforceAuthRateLimit(
   req: NextRequest,
-  action: "login" | "signup" | "resend",
+  action: "login" | "signup" | "resend" | "profile",
   email?: string
 ): Promise<RateLimitVerdict> {
   const now = new Date();
