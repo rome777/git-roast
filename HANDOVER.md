@@ -724,9 +724,10 @@ DATABASE_URL="<Neon pooled 문자열>" npm run set-password -- <이메일> "<충
   `VERCEL_PROJECT_PRODUCTION_URL` 로 폴백해 정상 동작하는 것을 실제로 확인했다.
 - `vercel link` 가 `.gitignore` 에 `.vercel` 과 `.env*` 를 추가했다. `.env*` 가
   `.env.example` 까지 가리므로 `!.env.example` 예외를 덧붙였다.
-- **GitHub 자동 배포는 연결되지 않았다.** `vercel git connect` 가 실패한다 —
-  Vercel 대시보드에서 GitHub 앱 권한을 한 번 승인해야 한다. 그전까지는
-  `vercel deploy --prod` 로 수동 배포한다.
+- **GitHub 자동 배포 연결됨** (2026-09-08). `main` 에 push 하면 Vercel 이 자동 배포한다.
+  CLI 의 `vercel git connect` 는 실패했다 — Vercel 대시보드
+  (Project Settings > Git)에서 GitHub 앱 권한을 승인해야 연결된다.
+  수동 배포가 필요하면 `vercel deploy --prod` 는 그대로 쓸 수 있다.
 
 **🚨 배포 직후 확인된 노출 (즉시 조치 필요)**
 
