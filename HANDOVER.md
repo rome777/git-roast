@@ -661,11 +661,11 @@ DATABASE_URL="<Neon pooled 문자열>" npm run set-password -- <이메일> "<충
 | # | 항목 | 상태 |
 | :-- | :--- | :--- |
 | 1 | `rome777@gmail.com`·`admin@gitroast.dev` 비밀번호 재설정 (⑧) | **사용자가 보류하기로 함 (2026-09-08)**. 공개 배포 전에는 반드시 처리해야 한다 — 값이 이미 git 히스토리에 공개돼 있다. |
-| 2 | Gemini/Vertex API 키 재발급 | **사용자가 보류하기로 함 (2026-09-08)** |
+| 2 | Gemini/Vertex API 키 재발급 | **사용자가 보류하기로 함 (2026-09-08)**. 위험도 정정: git 히스토리 전체를 훑은 결과 **API 키는 한 번도 커밋된 적이 없다** — 노출 범위는 git 이전의 로컬 파일뿐이다. 비밀번호(1번)와 달리 공개되지 않았다. |
 | 3 | Neon 가입·프로젝트 생성 | 브라우저 로그인 필요 — 그 뒤 `npm run db:copy` 로 이관까지 자동 |
 | 4 | `vercel login` | 브라우저 로그인 필요 — 그 뒤 ⑩ 4~5단계는 명령으로 끝 |
-| 5 | `/docs` 공개 범위 판단 | `TECH_SPEC.md`·`FINAL_CHECKLIST.md` 가 공개 대상(`lib/docs.ts` 화이트리스트). 내부 아키텍처와 보안 점검 내역이 그대로 노출된다. 포트폴리오라면 오히려 공개가 나을 수도 있어 판단을 남겨 뒀다. |
-| 6 | `tester-*` 계정 5건 정리 | 파괴적 작업이라 손대지 않았다 |
+| 5 | `/docs` 공개 범위 판단 | **완료 (2026-09-08)** — `FINAL_CHECKLIST.md` 를 화이트리스트에서 제외했다. 보안 점검의 "미결" 항목까지 담고 있어, 공개 서비스가 아직 막지 못한 곳의 목록을 스스로 게시하는 셈이었다. `TECH_SPEC.md` 는 설계 근거라 공개 유지. |
+| 6 | `tester-*` 계정 정리 | **완료 (2026-09-08)** — 분석 기록 0건 확인 후 삭제. 이후로는 `npm run db:clean-testers` 로 반복 처리 |
 
 **이번 세션에서 새로 만든 도구**
 
@@ -673,6 +673,7 @@ DATABASE_URL="<Neon pooled 문자열>" npm run set-password -- <이메일> "<충
 | :--- | :--- |
 | `npm run preflight` | 배포 준비 상태 점검. 커밋 누락·추적되지 않은 소스 파일·평문 비밀값·localhost DB·빌드타임 변수 누락·계정 상태를 한 번에 본다. 고치지 않고 판정만 한다. |
 | `npm run db:copy -- --to "<url>"` | PostgreSQL → PostgreSQL 이관. 기존 `db:migrate` 는 SQLite → PostgreSQL 전용이라 **로컬 PostgreSQL 을 클라우드로 올릴 경로가 없었다.** 원본은 읽기만 하고, 멱등하며, 건수를 대조한다. |
+| `npm run db:clean-testers` | 회귀 검사가 남긴 `tester-*@example.com` 계정 정리. **기본은 미리보기**이고 `-- --yes` 를 붙여야 지운다. 분석 기록이 있는 계정은 이름이 맞아도 건드리지 않는다. |
 
 > `npm run preflight` 는 오늘 실제로 겪은 사고(`git commit -a` 가 새 파일을 담지 않아
 > HEAD 가 빌드되지 않은 것)를 잡도록 **추적되지 않은 소스 파일** 검사를 넣어 뒀다.

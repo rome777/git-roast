@@ -40,14 +40,16 @@ export const PUBLIC_DOCS = [
     description: "5단계 모듈 분할, 구현 파일 목록, 모듈별 체크리스트",
     emoji: "🧩",
   },
-  {
-    slug: "final-checklist",
-    file: "FINAL_CHECKLIST.md",
-    label: "최종 통합 체크리스트",
-    description: "정상 시나리오·예외 흐름·보안 수칙 전수 검증 결과",
-    emoji: "✅",
-  },
 ] as const;
+
+/**
+ * 의도적으로 공개하지 않는 문서.
+ *
+ * - FINAL_CHECKLIST.md: 보안 점검 결과를 "미결" 항목까지 그대로 담고 있다.
+ *   공개 서비스에서 아직 막지 못한 곳의 목록을 스스로 게시하는 셈이 된다.
+ *   설계 근거를 보여 주는 목적이라면 TECH_SPEC.md 로 충분하다.
+ * - HANDOVER.md: 운영 계정과 인프라 상태를 담고 있다.
+ */
 
 export type PublicDoc = (typeof PUBLIC_DOCS)[number];
 

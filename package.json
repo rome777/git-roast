@@ -11,7 +11,8 @@
     "set-password": "node scripts/set-password.mjs",
     "db:migrate": "node scripts/migrate-sqlite-to-postgres.mjs",
     "db:copy": "node scripts/migrate-postgres-to-postgres.mjs",
-    "preflight": "node scripts/preflight.mjs"
+    "preflight": "node scripts/preflight.mjs",
+    "db:clean-testers": "node scripts/clean-test-accounts.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",
