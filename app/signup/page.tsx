@@ -13,6 +13,7 @@ import {
   ArrowRight,
   MailCheck,
   Check,
+  UserMinus,
 } from "lucide-react";
 import { CaptchaWidget, isCaptchaEnabled } from "@/components/auth/CaptchaWidget";
 import { Spinner, FormSkeleton } from "@/components/ui/Spinner";
@@ -43,6 +44,12 @@ export default function SignupPage() {
    * 멈춘 것처럼 보인다.
    */
   const [step, setStep] = useState<string | null>(null);
+  /** 탈퇴 직후 여기로 돌아온 경우(?left=1). 재가입이 가능하다는 것을 알린다. */
+  const [justLeft, setJustLeft] = useState(false);
+
+  useEffect(() => {
+    setJustLeft(new URLSearchParams(window.location.search).get("left") === "1");
+  }, []);
 
   useEffect(() => {
     // 로그인 여부는 서버 세션 하나만 본다.
@@ -168,6 +175,13 @@ export default function SignupPage() {
             무료 회원가입 후 깃허브 무제한 팩폭 &amp; 진단 카드를 발급받으세요.
           </p>
         </div>
+
+        {justLeft && !currentUser && (
+          <div className="mb-4 p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-400 flex items-center gap-2">
+            <UserMinus className="w-4 h-4 shrink-0 text-slate-500" />
+            <span>탈퇴가 완료되었습니다. 같은 이메일로 다시 가입하실 수 있습니다.</span>
+          </div>
+        )}
 
         {checkingSession ? (
           <FormSkeleton />

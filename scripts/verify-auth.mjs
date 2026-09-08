@@ -294,5 +294,83 @@ console.log("\n[10] 이메일 확인 토큰");
   }
 }
 
+console.log("\n[11] 회원 탈퇴 · 재가입");
+{
+  const ip = "198.51.150." + (Math.floor(Math.random() * 200) + 1);
+  const email = `tester-leave-${Date.now()}@example.com`;
+  const pw = freshPassword();
+
+  const joined = await req("/api/auth/signup", { method: "POST", body: { email, password: pw }, ip });
+  const cookie = joined.session;
+
+  if (!cookie) {
+    // 이메일 확인이 켜진 배포에서는 세션이 없어 이 절을 밟을 수 없다.
+    console.log("  SKIP  탈퇴 검사 — 이메일 확인이 켜져 있어 세션을 얻을 수 없습니다");
+  } else {
+    checkStatus("비로그인 탈퇴 요청 -> 401", await req("/api/auth/delete-account", {
+      method: "POST", body: { password: pw, confirmEmail: email }, ip,
+    }), 401);
+
+    checkStatus("비밀번호 없이 탈퇴 -> 400", await req("/api/auth/delete-account", {
+      method: "POST", body: { confirmEmail: email }, cookie, ip,
+    }), 400);
+
+    checkStatus("이메일 확인란이 다르면 -> 400", await req("/api/auth/delete-account", {
+      method: "POST", body: { password: pw, confirmEmail: "someone-else@example.com" }, cookie, ip,
+    }), 400);
+
+    checkStatus("비밀번호가 틀리면 -> 401", await req("/api/auth/delete-account", {
+      method: "POST", body: { password: "WrongPassword-1!", confirmEmail: email }, cookie, ip,
+    }), 401);
+
+    // 위 실패들이 계정을 건드리지 않았어야 한다.
+    checkStatus("실패한 탈퇴 시도 뒤에도 계정은 살아 있다", await req("/api/auth/me", { cookie, ip }), 200);
+
+    const gone = await req("/api/auth/delete-account", {
+      method: "POST", body: { password: pw, confirmEmail: email }, cookie, ip,
+    });
+    checkStatus("정상 탈퇴 -> 200", gone, 200);
+    check(
+      "탈퇴 응답이 세션 쿠키를 만료시킨다",
+      gone.setCookies.some((c) => /gitroast_session=;/.test(c)),
+      gone.setCookies.join(" | ")
+    );
+
+    // 탈퇴한 뒤에는 옛 세션도 옛 비밀번호도 통하지 않아야 한다.
+    const zombie = await req("/api/auth/me", { cookie, ip });
+    check("탈퇴 후 옛 세션은 통하지 않는다", zombie.json?.user == null, JSON.stringify(zombie.json));
+    checkStatus("탈퇴한 계정으로 로그인 -> 401", await req("/api/auth/login", {
+      method: "POST", body: { email, password: pw }, ip,
+    }), 401);
+
+    // 핵심: 같은 주소로 다시 가입할 수 있어야 한다(하드 삭제라 UNIQUE 가 풀린다).
+    const rejoin = await req("/api/auth/signup", {
+      method: "POST", body: { email, password: freshPassword() }, ip,
+    });
+    checkStatus("같은 이메일로 재가입 -> 201", rejoin, 201);
+    check("재가입 계정은 새 id 를 받는다", rejoin.json?.user?.id !== joined.json?.user?.id,
+      `이전=${joined.json?.user?.id} 이후=${rejoin.json?.user?.id}`);
+
+    if (rejoin.session) {
+      const hist = await req("/api/history", { cookie: rejoin.session, ip });
+      check(
+        "재가입 계정에 옛 기록이 남아 있지 않다",
+        hist.json?.evaluations?.length === 0,
+        JSON.stringify(hist.json?.evaluations ?? []).slice(0, 120)
+      );
+    }
+  }
+
+  // 공용 데모 계정은 한 사람이 지우면 모두의 기록이 날아간다.
+  const demo = await req("/api/auth/demo", { method: "POST", ip });
+  if (demo.session) {
+    checkStatus("데모 계정 탈퇴 -> 403", await req("/api/auth/delete-account", {
+      method: "POST",
+      body: { password: "whatever", confirmEmail: "demo@gitroast.dev" },
+      cookie: demo.session, ip,
+    }), 403);
+  }
+}
+
 console.log(`\n결과: ${pass} PASS / ${fail} FAIL\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -712,6 +712,103 @@ export async function setUserPasswordHash(email: string, passwordHash: string): 
   );
 }
 
+/** 관리자 계정 수. 마지막 관리자가 탈퇴해 /admin 이 잠기는 것을 막는 데 쓴다. */
+export async function countAdminsInDb(): Promise<number> {
+  if (isPostgresConfigured()) {
+    try {
+      const pool = getPgPool();
+      await initPgSchema(pool);
+      const res = await pool.query(`SELECT count(*)::int AS count FROM users WHERE role = 'admin';`);
+      return Number(res.rows[0]?.count ?? 0);
+    } catch (err) {
+      handlePgError("countAdmins", err);
+      return 0;
+    }
+  }
+
+  const db = getSqliteDb();
+  const row = db.prepare(`SELECT count(*) AS count FROM users WHERE role = 'admin';`).get() as {
+    count: number;
+  };
+  return Number(row?.count ?? 0);
+}
+
+/**
+ * 회원 탈퇴. 계정과 그 계정이 남긴 것을 **전부 지운다.**
+ *
+ * 소프트 삭제(deleted_at 표시)를 쓰지 않는다. 이메일에 UNIQUE 제약이 걸려 있어
+ * 행을 남겨 두면 같은 주소로 재가입할 수 없고, "지웠다" 고 해 놓고 이메일을
+ * 계속 들고 있는 것은 탈퇴의 의미에도 맞지 않는다.
+ *
+ * 분석 기록도 함께 지운다. evaluations.user_email 에 이메일이 그대로 들어 있어
+ * 계정만 지우면 개인정보가 남는다. **부작용으로 그 사람이 공유한 카드 링크가
+ * 죽는다** — 호출부에서 반드시 미리 알린 뒤에 부른다.
+ *
+ * PostgreSQL 에서는 한 트랜잭션으로 묶는다. 중간에 실패해 기록만 지워지고
+ * 계정이 남으면, 사용자는 "탈퇴했는데 로그인이 된다" 는 상태를 보게 된다.
+ */
+export async function deleteUserAccountFromDb(
+  email: string
+): Promise<{ deleted: boolean; evaluations: number }> {
+  const normalized = email.trim().toLowerCase();
+
+  if (isPostgresConfigured()) {
+    const pool = getPgPool();
+    await initPgSchema(pool);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const user = await client.query(
+        `SELECT id FROM users WHERE LOWER(email) = LOWER($1) FOR UPDATE;`,
+        [normalized]
+      );
+      if (user.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return { deleted: false, evaluations: 0 };
+      }
+      const userId = user.rows[0].id as string;
+
+      const evals = await client.query(
+        `DELETE FROM evaluations WHERE LOWER(user_email) = LOWER($1) OR user_id = $2;`,
+        [normalized, userId]
+      );
+      await client.query(`DELETE FROM favorites WHERE user_id = $1;`, [userId]);
+      await client.query(`DELETE FROM users WHERE LOWER(email) = LOWER($1);`, [normalized]);
+
+      await client.query("COMMIT");
+      return { deleted: true, evaluations: evals.rowCount ?? 0 };
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      // 여기서는 SQLite 로 폴백하지 않는다. 탈퇴가 반쪽만 된 상태로 조용히
+      // 넘어가면 사용자는 지워진 줄 알지만 데이터가 남는다.
+      console.error("[db] 탈퇴 처리 실패 — 아무것도 지우지 않았습니다.", err);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  const db = getSqliteDb();
+  const row = db.prepare(`SELECT id FROM users WHERE LOWER(email) = LOWER(?);`).get(normalized) as
+    | { id: string }
+    | undefined;
+  if (!row) return { deleted: false, evaluations: 0 };
+
+  const before = db
+    .prepare(`SELECT count(*) AS count FROM evaluations WHERE LOWER(user_email) = LOWER(?);`)
+    .get(normalized) as { count: number };
+
+  db.prepare(`DELETE FROM evaluations WHERE LOWER(user_email) = LOWER(?) OR user_id = ?;`).run(
+    normalized,
+    row.id
+  );
+  db.prepare(`DELETE FROM favorites WHERE user_id = ?;`).run(row.id);
+  db.prepare(`DELETE FROM users WHERE LOWER(email) = LOWER(?);`).run(normalized);
+
+  return { deleted: true, evaluations: Number(before?.count ?? 0) };
+}
+
 /** 공유 링크(/result/[id])에서 쓰는 단건 조회. 없으면 null. */
 export async function getEvaluationByIdFromDb(id: string): Promise<EvaluationResult | null> {
   if (isPostgresConfigured()) {

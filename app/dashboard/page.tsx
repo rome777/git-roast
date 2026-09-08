@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { History, Bookmark, Sparkles, Trash2, ArrowRight, ExternalLink, Flame, Briefcase } from "lucide-react";
 import { Spinner, LoadingScreen } from "@/components/ui/Spinner";
+import { DeleteAccountSection } from "@/components/auth/DeleteAccountSection";
 import { EvaluationResult } from "@/lib/ai/types";
 import { TierBadge } from "@/components/evaluation/TierBadge";
 
@@ -292,6 +293,12 @@ export default function DashboardPage() {
             );
           })}
         </div>
+      )}
+
+      {/* 계정 관리 — 목록 아래, 눈에 잘 띄지 않는 자리에 접어 둔다.
+          자주 쓰는 동작이 아니고, 실수로 열리면 안 되는 동작이다. */}
+      {currentUser && (
+        <DeleteAccountSection email={currentUser.email} evaluationCount={history.length} />
       )}
     </div>
   );
