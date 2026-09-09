@@ -151,7 +151,7 @@ export default function HomePage() {
       {/* Hero Title */}
       <h1 className="text-4xl sm:text-6xl xl:text-7xl font-black text-center tracking-tight text-white max-w-3xl xl:max-w-5xl leading-tight text-balance">
         당신의 깃허브,{" "}
-        <span className="gradient-text-roast">잔디밭</span>인가요{" "}
+        <span className="gradient-text-grass">잔디밭</span>인가요{" "}
         <span className="gradient-text-roast">사막</span>인가요?
       </h1>
 

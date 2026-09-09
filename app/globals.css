@@ -63,6 +63,12 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
+.gradient-text-grass {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #10b981 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 /* 한국어 줄바꿈 —
    기본 word-break 는 어절 중간("인가요" -> "인가" / "요")에서 끊는다.
    keep-all 로 어절을 보존하고, 대신 URL·리포지토리명 같은 긴 영문 토큰은
