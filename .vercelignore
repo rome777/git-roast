@@ -11,6 +11,6 @@ data/
 .env.*
 
 # 문서·개발 산출물
-HANDOVER.md
+docs/HANDOVER.md
 .next/
 coverage/
