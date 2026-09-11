@@ -1,0 +1,13 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="260" height="52" viewBox="0 0 260 52">
+  <defs>
+    <linearGradient id="gradA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF7A00" />
+      <stop offset="100%" stop-color="#EA580C" />
+    </linearGradient>
+    <filter id="shadowA" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#EA580C" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect x="3" y="3" width="254" height="46" rx="13" fill="url(#gradA)" stroke="#FED7AA" stroke-width="1" filter="url(#shadowA)" />
+  <text x="130" y="27" fill="#ffffff" font-size="16" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="central">🔥 GitRoast 바로가기  ➔</text>
+</svg>

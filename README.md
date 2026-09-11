@@ -1,6 +1,6 @@
 # 🔥 GitRoast (깃로스트)
 
-[![GitRoast 서비스 바로가기](https://img.shields.io/badge/🔥_GitRoast-서비스_바로가기-F97316?style=for-the-badge)](https://git-roast-three.vercel.app)
+[![GitRoast 바로가기](docs/button.svg)](https://git-roast-three.vercel.app)
 
 겉만 그럴싸하게 채운 기록인지, 정말 알차게 채운 기록인지 짚어드립니다.  
 공개된 활동 기록을 바탕으로 눈치 보지 않고 뼈 때리는 현실 피드백을 남겨주는 서비스입니다.
